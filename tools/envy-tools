@@ -116,9 +116,9 @@ cmd_list() {
 }
 
 cmd_installed() {
-  local row k cmd sum any=0
+  local row k cmd any=0
   for row in "${APPS[@]}"; do
-    IFS='|' read -r k cmd sum <<<"$row"
+    IFS='|' read -r k cmd _ <<<"$row"
     is_installed "$cmd" && { printf "  %-18s %s\n" "$k" "$cmd"; any=1; }
   done
   [ "$any" = 1 ] || printf "Nothing installed yet. Try: envy-tools install vault\n"

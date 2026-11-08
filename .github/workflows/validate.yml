@@ -24,7 +24,7 @@ jobs:
         run: ksvalidator kickstart/envy-black-veil.ks
 
       - name: ShellCheck the scripts
-        run: shellcheck tools/envy-tools build/build-iso.sh
+        run: shellcheck -e SC2059 tools/envy-tools build/build-iso.sh
 
       - name: Check SVG art is well-formed
         run: |

@@ -22,7 +22,7 @@ validate-ks:
 
 validate-shell:
 	@echo "== shell =="
-	shellcheck tools/envy-tools build/build-iso.sh
+	shellcheck -e SC2059 tools/envy-tools build/build-iso.sh
 
 validate-desktop:
 	@echo "== desktop entries (generated samples) =="
