@@ -1,0 +1,71 @@
+# ENVY BLACK VEIL — GRUB2 theme
+# background.png is rendered from background.svg at package-build time.
+
+desktop-image: "background.png"
+desktop-color: "#050713"
+title-text: ""
+message-color: "#b9c3df"
+message-bg-color: "#050713"
+terminal-font: "Unifont Regular 16"
+
+# --- Brand line -------------------------------------------------------------
++ label {
+    top = 12%
+    left = 0
+    width = 100%
+    align = "center"
+    color = "#f2f4ff"
+    font = "DejaVu Sans Bold 28"
+    text = "ENVY  BLACK  VEIL"
+}
++ label {
+    top = 19%
+    left = 0
+    width = 100%
+    align = "center"
+    color = "#35e8ff"
+    font = "DejaVu Sans 13"
+    text = "a Linux world of my own"
+}
+
+# --- Boot menu --------------------------------------------------------------
++ boot_menu {
+    left = 25%
+    width = 50%
+    top = 34%
+    height = 46%
+    item_font = "DejaVu Sans 16"
+    item_color = "#b9c3df"
+    selected_item_color = "#050713"
+    item_height = 40
+    item_padding = 10
+    item_spacing = 6
+    icon_width = 0
+    icon_height = 0
+    selected_item_color = "#35e8ff"
+    scrollbar = false
+}
+
+# --- Countdown --------------------------------------------------------------
++ label {
+    top = 86%
+    left = 0
+    width = 100%
+    align = "center"
+    id = "__timeout__"
+    color = "#6f7898"
+    font = "DejaVu Sans 12"
+    text = "Booting in %d s  —  any key to choose"
+}
+
++ progress_bar {
+    id = "__timeout__"
+    top = 90%
+    left = 30%
+    width = 40%
+    height = 8
+    bg_color = "#121735"
+    fg_color = "#ff3db4"
+    border_color = "#1f2547"
+    text = ""
+}

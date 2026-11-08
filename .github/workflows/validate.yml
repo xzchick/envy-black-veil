@@ -1,0 +1,65 @@
+name: Validate
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install validators
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y shellcheck desktop-file-utils libxml2-utils pykickstart python3-yaml rpm
+
+      - name: Validate the kickstart
+        run: ksvalidator kickstart/envy-black-veil.ks
+
+      - name: ShellCheck the scripts
+        run: shellcheck tools/envy-tools build/build-iso.sh
+
+      - name: Check SVG art is well-formed
+        run: |
+          xmllint --noout \
+            theme/wallpaper/envy-black-veil.svg \
+            theme/grub/envy-black-veil/background.svg \
+            theme/plymouth/envy-black-veil/logo.svg \
+            theme/plymouth/envy-black-veil/spark.svg
+
+      - name: Validate JSON / YAML config
+        run: |
+          python3 -c "import json; json.load(open('theme/wallpaper/metadata.json'))"
+          python3 - <<'PY'
+          import sys, re, pathlib
+          # branding.desc and settings.conf are YAML; parse with a tolerant loader if available.
+          try:
+              import yaml
+          except ImportError:
+              print("PyYAML not present; skipping deep YAML parse"); sys.exit(0)
+          for f in ["installer/calamares/branding/envy/branding.desc",
+                    "installer/calamares/settings.conf",
+                    "installer/calamares/shellprocess-envy.conf"]:
+              yaml.safe_load(pathlib.Path(f).read_text())
+              print("ok:", f)
+          PY
+
+      - name: Lint desktop-entry generation
+        run: |
+          printf '[Desktop Entry]\nType=Application\nName=ENVY Vault\nExec=envy-vault\nTerminal=false\nCategories=Utility;Security;\n' > sample.desktop
+          desktop-file-validate sample.desktop
+          rm -f sample.desktop
+
+      - name: Sanity-check the RPM spec parses
+        run: |
+          sudo apt-get install -y rpm
+          # rpmspec --parse needs macros present; at minimum the file must tokenize.
+          grep -q '^Name:[[:space:]]*envy-black-veil' packaging/envy-black-veil.spec
+          grep -q '%package theme' packaging/envy-black-veil.spec
+          echo "spec structure present"

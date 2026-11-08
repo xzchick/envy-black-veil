@@ -1,0 +1,156 @@
+#!/usr/bin/env bash
+# envy-tools — add ENVY apps onto ENVY BLACK VEIL (or any Linux with Python 3.10+).
+#
+# BLACK VEIL ships as JUST THE OS. Every ENVY tool installs on top of it, on
+# demand, into one isolated virtualenv — never touching the system Python — with
+# a launcher on your PATH and an entry in the KDE menu. Uninstalling removes all
+# three cleanly.
+#
+#   envy-tools list                 show every ENVY app and whether it is installed
+#   envy-tools install vault veil   install one or more by name
+#   envy-tools install all          install the whole suite
+#   envy-tools installed            list what you have installed
+#   envy-tools remove oracle        uninstall one
+#   envy-tools update [name|all]    reinstall at the latest version
+#
+# Installing downloads from GitHub, so it needs a network connection. Running the
+# tools afterwards does not: every ENVY app is fully offline.
+
+set -euo pipefail
+
+OWNER="xzchick"
+VENV="${ENVY_TOOLS_HOME:-$HOME/.local/share/envy-tools/venv}"
+BIN="$HOME/.local/bin"
+APPS_DIR="$HOME/.local/share/applications"
+
+# key | console command | one-line summary
+APPS=(
+  "vault|envy-vault|AES-256 file encryption"
+  "veil|envy-veil|hide an encrypted file inside an image or audio carrier"
+  "casebook|envy-casebook|encrypted, revision-preserving case notes"
+  "crypto-workbench|envy-crypto-workbench|encoding, classical ciphers and text analysis"
+  "ops-desk|envy-ops-desk|encrypted operations plans with authenticated handoffs"
+  "evidence-vault|envy-evidence-vault|copied-file intake with a hash-verified custody journal"
+  "integrity-monitor|envy-integrity-monitor|encrypted file-integrity baselines and change detection"
+  "orbit|envy-orbit|encrypted recurring-cadence tracking"
+  "skywatch|envy-skywatch|encrypted watchlists and offline content scanning"
+  "oracle|envy-oracle|encrypted forecasts and calibration scoring"
+  "hypothesis|envy-hypothesis|Analysis of Competing Hypotheses"
+)
+
+c_pink="\033[38;5;205m"; c_cyan="\033[38;5;51m"; c_dim="\033[38;5;102m"; c_off="\033[0m"
+
+die() { printf "envy-tools: %s\n" "$*" >&2; exit 1; }
+
+app_field() { # key field-index(2|3)
+  local key="$1" idx="$2" row
+  for row in "${APPS[@]}"; do
+    IFS='|' read -r k cmd sum <<<"$row"
+    [ "$k" = "$key" ] && { [ "$idx" = 2 ] && echo "$cmd" || echo "$sum"; return 0; }
+  done
+  return 1
+}
+
+ensure_venv() {
+  command -v python3 >/dev/null || die "python3 is required"
+  if [ ! -x "$VENV/bin/python" ]; then
+    printf "Creating the ENVY tools environment at %s\n" "$VENV"
+    python3 -m venv "$VENV"
+    "$VENV/bin/python" -m pip install --quiet --upgrade pip
+  fi
+  mkdir -p "$BIN" "$APPS_DIR"
+}
+
+is_installed() { [ -x "$VENV/bin/$1" ]; }
+
+repo_url() { echo "git+https://github.com/$OWNER/envy-$1.git"; }
+
+write_launcher() { # key command
+  local key="$1" cmd="$2"
+  cat > "$BIN/$cmd" <<EOF
+#!/usr/bin/env bash
+exec "$VENV/bin/$cmd" "\$@"
+EOF
+  chmod +x "$BIN/$cmd"
+  local title="ENVY ${key^}"
+  cat > "$APPS_DIR/$cmd.desktop" <<EOF
+[Desktop Entry]
+Type=Application
+Name=$title
+GenericName=$(app_field "$key" 3)
+Comment=$(app_field "$key" 3)
+Exec=$BIN/$cmd
+Terminal=false
+Categories=Utility;Security;Qt;
+Keywords=ENVY;encrypted;offline;
+EOF
+}
+
+do_install() {
+  local key="$1" cmd
+  cmd="$(app_field "$key" 2)" || die "unknown app: $key  (try: envy-tools list)"
+  ensure_venv
+  printf "${c_cyan}Installing${c_off} ENVY %s …\n" "$key"
+  "$VENV/bin/pip" install --quiet --upgrade "$(repo_url "$key")"
+  write_launcher "$key" "$cmd"
+  printf "${c_pink}✓${c_off} %s installed — run ${c_cyan}%s${c_off} or find it in the menu.\n" "$key" "$cmd"
+}
+
+do_remove() {
+  local key="$1" cmd
+  cmd="$(app_field "$key" 2)" || die "unknown app: $key"
+  is_installed "$cmd" || die "$key is not installed"
+  "$VENV/bin/pip" uninstall -y "envy-$key" >/dev/null 2>&1 || true
+  rm -f "$BIN/$cmd" "$APPS_DIR/$cmd.desktop"
+  printf "Removed %s.\n" "$key"
+}
+
+cmd_list() {
+  printf "${c_pink}ENVY tools${c_off}  —  add any onto BLACK VEIL with: envy-tools install <name>\n\n"
+  local row k cmd sum mark
+  for row in "${APPS[@]}"; do
+    IFS='|' read -r k cmd sum <<<"$row"
+    if is_installed "$cmd"; then mark="${c_cyan}installed${c_off}"; else mark="${c_dim}—${c_off}"; fi
+    printf "  %-18s %b  %s\n" "$k" "$mark" "$sum"
+  done
+}
+
+cmd_installed() {
+  local row k cmd sum any=0
+  for row in "${APPS[@]}"; do
+    IFS='|' read -r k cmd sum <<<"$row"
+    is_installed "$cmd" && { printf "  %-18s %s\n" "$k" "$cmd"; any=1; }
+  done
+  [ "$any" = 1 ] || printf "Nothing installed yet. Try: envy-tools install vault\n"
+}
+
+all_keys() { local row k; for row in "${APPS[@]}"; do IFS='|' read -r k _ _ <<<"$row"; echo "$k"; done; }
+
+main() {
+  local action="${1:-list}"; shift || true
+  case "$action" in
+    list) cmd_list ;;
+    installed) cmd_installed ;;
+    install)
+      [ "$#" -gt 0 ] || die "name a tool, or 'all'  (see: envy-tools list)"
+      # shellcheck disable=SC2046  # all_keys prints one bare key per line, by design
+      [ "$1" = "all" ] && set -- $(all_keys)
+      for a in "$@"; do do_install "$a"; done
+      printf "\nDone. Launchers are in %s; menu entries in %s.\n" "$BIN" "$APPS_DIR"
+      case ":$PATH:" in *":$BIN:"*) ;; *) printf "${c_dim}Add %s to your PATH to run them by name.${c_off}\n" "$BIN";; esac
+      ;;
+    update)
+      # shellcheck disable=SC2046  # all_keys prints one bare key per line, by design
+      [ "${1:-all}" = "all" ] && set -- $(all_keys)
+      for a in "$@"; do is_installed "$(app_field "$a" 2)" && do_install "$a"; done
+      ;;
+    remove|uninstall)
+      [ "$#" -gt 0 ] || die "name a tool to remove"
+      for a in "$@"; do do_remove "$a"; done
+      ;;
+    -h|--help|help) sed -n '2,25p' "$0" | sed 's/^# \{0,1\}//' ;;
+    *) die "unknown command: $action  (try: envy-tools help)" ;;
+  esac
+}
+
+main "$@"

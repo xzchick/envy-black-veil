@@ -1,0 +1,8 @@
+[Plymouth Theme]
+Name=ENVY BLACK VEIL
+Description=Neon boot splash for ENVY BLACK VEIL — wordmark, a travelling spark, and a LUKS passphrase prompt.
+ModuleName=script
+
+[script]
+ImageDir=/usr/share/plymouth/themes/envy-black-veil
+ScriptFile=/usr/share/plymouth/themes/envy-black-veil/envy-black-veil.script

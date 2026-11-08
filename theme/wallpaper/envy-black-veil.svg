@@ -1,0 +1,63 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="2560" height="1440" viewBox="0 0 2560 1440" role="img" aria-label="ENVY BLACK VEIL neon wallpaper">
+  <defs>
+    <radialGradient id="neb1" cx="22%" cy="30%" r="55%">
+      <stop offset="0%" stop-color="#8547e8" stop-opacity="0.42"/>
+      <stop offset="100%" stop-color="#050713" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="neb2" cx="82%" cy="24%" r="50%">
+      <stop offset="0%" stop-color="#35e8ff" stop-opacity="0.30"/>
+      <stop offset="100%" stop-color="#050713" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="neb3" cx="60%" cy="96%" r="60%">
+      <stop offset="0%" stop-color="#ff3db4" stop-opacity="0.30"/>
+      <stop offset="100%" stop-color="#050713" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="word" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#35e8ff"/>
+      <stop offset="55%" stop-color="#f2f4ff"/>
+      <stop offset="100%" stop-color="#ff3db4"/>
+    </linearGradient>
+    <linearGradient id="floorfade" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#050713" stop-opacity="0"/>
+      <stop offset="100%" stop-color="#050713"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="2560" height="1440" fill="#050713"/>
+  <rect width="2560" height="1440" fill="url(#neb1)"/>
+  <rect width="2560" height="1440" fill="url(#neb2)"/>
+  <rect width="2560" height="1440" fill="url(#neb3)"/>
+
+  <!-- stars -->
+  <g fill="#c9d9ff">
+    <circle cx="180" cy="160" r="1.6" opacity=".7"/><circle cx="420" cy="90" r="1.1" opacity=".5"/>
+    <circle cx="760" cy="220" r="1.4" opacity=".6"/><circle cx="1180" cy="120" r="1.0" opacity=".45"/>
+    <circle cx="1520" cy="200" r="1.7" opacity=".7"/><circle cx="1980" cy="110" r="1.2" opacity=".5"/>
+    <circle cx="2320" cy="240" r="1.5" opacity=".6"/><circle cx="2460" cy="420" r="1.1" opacity=".5"/>
+    <circle cx="300" cy="520" r="1.3" opacity=".5"/><circle cx="120" cy="760" r="1.0" opacity=".4"/>
+    <circle cx="2200" cy="560" r="1.4" opacity=".55"/><circle cx="2420" cy="700" r="1.1" opacity=".45"/>
+    <circle cx="640" cy="440" r="1.0" opacity=".4"/><circle cx="1720" cy="380" r="1.2" opacity=".5"/>
+    <circle cx="980" cy="300" r="1.0" opacity=".4"/><circle cx="2040" cy="340" r="1.3" opacity=".5"/>
+  </g>
+
+  <!-- perspective floor -->
+  <g stroke="#ac8cff" stroke-opacity="0.18" stroke-width="1.4">
+    <line x1="1280" y1="980" x2="-400" y2="1440"/><line x1="1280" y1="980" x2="120" y2="1440"/>
+    <line x1="1280" y1="980" x2="520" y2="1440"/><line x1="1280" y1="980" x2="900" y2="1440"/>
+    <line x1="1280" y1="980" x2="1280" y2="1440"/><line x1="1280" y1="980" x2="1660" y2="1440"/>
+    <line x1="1280" y1="980" x2="2040" y2="1440"/><line x1="1280" y1="980" x2="2440" y2="1440"/>
+    <line x1="1280" y1="980" x2="2960" y2="1440"/>
+  </g>
+  <g stroke="#35e8ff" stroke-opacity="0.16" stroke-width="1.2">
+    <line x1="0" y1="1040" x2="2560" y2="1040"/><line x1="0" y1="1120" x2="2560" y2="1120"/>
+    <line x1="0" y1="1220" x2="2560" y2="1220"/><line x1="0" y1="1340" x2="2560" y2="1340"/>
+  </g>
+  <line x1="0" y1="980" x2="2560" y2="980" stroke="#ff3db4" stroke-opacity="0.5" stroke-width="2"/>
+  <rect x="0" y="980" width="2560" height="460" fill="url(#floorfade)"/>
+
+  <!-- wordmark -->
+  <g text-anchor="middle" font-family="Helvetica, Arial, sans-serif">
+    <text x="1280" y="700" font-size="240" font-weight="700" letter-spacing="8" fill="url(#word)">ENVY</text>
+    <text x="1280" y="790" font-size="54" letter-spacing="28" fill="#ac8cff">B L A C K   V E I L</text>
+  </g>
+</svg>

@@ -1,0 +1,16 @@
+[SddmGreeterTheme]
+Name=ENVY BLACK VEIL
+Description=Neon login for ENVY BLACK VEIL — AES-dark with pink and cyan.
+Author=Envy (github.com/xzchick)
+Copyright=(c) 2026 Envy
+License=MIT
+Type=sddm-theme
+Version=0.1.0
+Website=https://github.com/xzchick/envy-black-veil
+Screenshot=preview.png
+MainScript=Main.qml
+ConfigFile=theme.conf
+TranslationsDirectory=
+Email=
+Theme-Id=envy-black-veil
+Theme-API=2.0

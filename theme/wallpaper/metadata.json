@@ -1,0 +1,10 @@
+{
+    "KPlugin": {
+        "Authors": [
+            { "Email": "", "Name": "Envy" }
+        ],
+        "Id": "EnvyBlackVeil",
+        "License": "MIT",
+        "Name": "ENVY BLACK VEIL"
+    }
+}

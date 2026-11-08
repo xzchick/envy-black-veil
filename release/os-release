@@ -1,0 +1,16 @@
+NAME="ENVY BLACK VEIL"
+VERSION="0.1.0 (Nebula)"
+ID=envy-black-veil
+ID_LIKE="almalinux rhel centos fedora"
+VERSION_ID="0.1.0"
+PLATFORM_ID="platform:el10"
+PRETTY_NAME="ENVY BLACK VEIL 0.1.0 (Nebula)"
+ANSI_COLOR="0;38;5;205"
+LOGO=envy-black-veil
+CPE_NAME="cpe:/o:xzchick:envy_black_veil:0.1.0"
+HOME_URL="https://github.com/xzchick/envy-black-veil"
+DOCUMENTATION_URL="https://github.com/xzchick/envy-black-veil#readme"
+BUG_REPORT_URL="https://github.com/xzchick/envy-black-veil/issues"
+BUILD_ID="0.1.0"
+VARIANT="KDE Plasma"
+VARIANT_ID=kde
