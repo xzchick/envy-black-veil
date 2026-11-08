@@ -17,7 +17,8 @@ jobs:
       - name: Install validators
         run: |
           sudo apt-get update
-          sudo apt-get install -y shellcheck desktop-file-utils libxml2-utils pykickstart python3-yaml rpm
+          sudo apt-get install -y shellcheck desktop-file-utils libxml2-utils python3-yaml rpm
+          sudo pip install --break-system-packages pykickstart
 
       - name: Validate the kickstart
         run: ksvalidator kickstart/envy-black-veil.ks
@@ -58,7 +59,6 @@ jobs:
 
       - name: Sanity-check the RPM spec parses
         run: |
-          sudo apt-get install -y rpm
           # rpmspec --parse needs macros present; at minimum the file must tokenize.
           grep -q '^Name:[[:space:]]*envy-black-veil' packaging/envy-black-veil.spec
           grep -q '%package theme' packaging/envy-black-veil.spec
