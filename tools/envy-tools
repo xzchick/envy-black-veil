@@ -14,7 +14,9 @@
 #   envy-tools update [name|all]    reinstall at the latest version
 #
 # Installing downloads from GitHub, so it needs a network connection. Running the
-# tools afterwards does not: every ENVY app is fully offline.
+# tools afterwards does not, with two deliberate exceptions: Recon looks things up
+# on the internet (and says so before every request), and Tunnel talks to your own
+# VPN server over ssh.
 
 set -euo pipefail
 
@@ -36,6 +38,8 @@ APPS=(
   "skywatch|envy-skywatch|encrypted watchlists and offline content scanning"
   "oracle|envy-oracle|encrypted forecasts and calibration scoring"
   "hypothesis|envy-hypothesis|Analysis of Competing Hypotheses"
+  "recon|envy-recon|OSINT terminal for domains, IPs, certificates and file metadata"
+  "tunnel|envy-tunnel|self-hosted WireGuard VPN on your own server"
 )
 
 c_pink="\033[38;5;205m"; c_cyan="\033[38;5;51m"; c_dim="\033[38;5;102m"; c_off="\033[0m"
@@ -72,7 +76,10 @@ write_launcher() { # key command
 exec "$VENV/bin/$cmd" "\$@"
 EOF
   chmod +x "$BIN/$cmd"
-  local title="ENVY ${key^}"
+  local title="ENVY ${key^}" terminal=false keywords="ENVY;encrypted;offline;"
+  # Recon is a terminal app, so its menu entry opens a terminal.
+  [ "$key" = recon ] && { terminal=true; keywords="ENVY;OSINT;recon;"; }
+  [ "$key" = tunnel ] && keywords="ENVY;VPN;WireGuard;"
   cat > "$APPS_DIR/$cmd.desktop" <<EOF
 [Desktop Entry]
 Type=Application
@@ -80,9 +87,9 @@ Name=$title
 GenericName=$(app_field "$key" 3)
 Comment=$(app_field "$key" 3)
 Exec=$BIN/$cmd
-Terminal=false
+Terminal=$terminal
 Categories=Utility;Security;Qt;
-Keywords=ENVY;encrypted;offline;
+Keywords=$keywords
 EOF
 }
 

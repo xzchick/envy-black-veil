@@ -50,6 +50,8 @@ Each one installs into a single isolated environment, lands on your PATH and in 
 | **SkyWatch** | encrypted watchlists and offline content scanning |
 | **Oracle** | encrypted forecasts and calibration scoring |
 | **Hypothesis** | Analysis of Competing Hypotheses |
+| **Recon** | OSINT terminal for domains, IPs, certificates and file metadata (uses the network, and shows every request) |
+| **Tunnel** | self-hosted WireGuard VPN on your own server |
 
 Every one is its own standalone app, installable on BLACK VEIL from its Linux release bundle or with `pip` — and on macOS and Windows too.
 
