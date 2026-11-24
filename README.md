@@ -54,6 +54,7 @@ Each one installs into a single isolated environment, lands on your PATH and in 
 | **Tunnel** | self-hosted WireGuard VPN on your own server |
 
 Every one is its own standalone app, installable on BLACK VEIL from its Linux release bundle or with `pip` — and on macOS and Windows too.
+On any OS, [ENVY Tools](https://github.com/xzchick/envy-tools) installs and updates them from their signed release bundles, with a window or the same `list`/`install`/`update`/`remove` commands.
 
 ---
 
