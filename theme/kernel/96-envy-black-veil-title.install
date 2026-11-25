@@ -3,22 +3,29 @@
 #
 # kernel-install runs this for every kernel it adds (at install time and on each
 # kernel update), after the boot loader entry has been written. It renames this
-# installation's entries from "AlmaLinux (<kernel>) 10.x (<codename>)" to
+# installation's entries from kernel-install's "<NAME> (<kernel>) <VERSION>" to
 # "ENVY BLACK VEIL (<kernel>) on AlmaLinux 10.x". Titles are only labels: GRUB
 # picks entries by their IDs. Installed by envy-black-veil-theme.
 
 COMMAND="${1:-}"
 [ "$COMMAND" = add ] || exit 0
 [ -n "${KERNEL_INSTALL_MACHINE_ID:-}" ] || exit 0
+# kernel-install titled the entry "<NAME> (<kernel>) <VERSION>" from /etc/os-release
+# (BLACK VEIL's name there since 0.1.0-6); "on AlmaLinux 10.x" comes from AlmaLinux's
+# own /usr/lib/os-release.
 OS_RELEASE="${OS_RELEASE:-/etc/os-release}"
+BASE_RELEASE="${BASE_RELEASE:-/usr/lib/os-release}"
 ENTRIES="${ENTRIES:-/boot/loader/entries}"
 [ -f "$OS_RELEASE" ] || exit 0
+[ -f "$BASE_RELEASE" ] || BASE_RELEASE="$OS_RELEASE"
 # shellcheck disable=SC1090
-. "$OS_RELEASE"
-[ -n "${NAME:-}" ] || exit 0
+name=$(. "$OS_RELEASE" && printf '%s' "${NAME:-}")
+# shellcheck disable=SC1090
+base=$(. "$BASE_RELEASE" && printf '%s %s' "${NAME:-}" "${VERSION_ID:-}")
+[ -n "$name" ] || exit 0
 
 for entry in "$ENTRIES/${KERNEL_INSTALL_MACHINE_ID}"-*.conf; do
     [ -f "$entry" ] || continue
-    sed -i -E "s/^title[[:space:]]+${NAME}[[:space:]]+(\([^)]*\)).*/title ENVY BLACK VEIL \1 on ${NAME} ${VERSION_ID:-}/" "$entry"
+    sed -i -E "s/^title[[:space:]]+${name}[[:space:]]+(\([^)]*\)).*/title ENVY BLACK VEIL \1 on ${base}/" "$entry"
 done
 exit 0

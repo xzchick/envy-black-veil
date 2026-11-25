@@ -23,7 +23,8 @@ validate-ks:
 validate-shell:
 	@echo "== shell =="
 	shellcheck -e SC2059 tools/envy-tools tools/envy-hardware-report build/build-iso.sh ci/build-in-vm.sh \
-		try-black-veil.sh live/dracut/90envy-live-persist/*.sh repo/publish.sh
+		try-black-veil.sh live/dracut/90envy-live-persist/*.sh repo/publish.sh \
+		tools/envy-os-release theme/kernel/96-envy-black-veil-title.install
 
 validate-desktop:
 	@echo "== desktop entries =="

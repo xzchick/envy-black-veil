@@ -1,0 +1,54 @@
+#!/bin/sh
+# envy-os-release: BLACK VEIL's name on the system. Writes /etc/os-release from
+# AlmaLinux's own /usr/lib/os-release with BLACK VEIL's NAME, VERSION, PRETTY_NAME,
+# logo, colour and web links. ID, ID_LIKE, VERSION_ID, PLATFORM_ID, CPE_NAME and
+# AlmaLinux's other fields stay as they are, so software that asks which OS (and
+# which Enterprise Linux release) this is keeps working, AlmaLinux's installer
+# settings included: Anaconda picks them by ID.
+#
+# envy-black-veil-release runs it when it's installed or updated, and whenever
+# AlmaLinux updates /usr/lib/os-release (an RPM trigger on almalinux-release), so
+# it stays in step with AlmaLinux's minor releases. Removing the package puts
+# AlmaLinux's symlink back.
+#
+#   envy-os-release              write /etc/os-release
+#   envy-os-release --restore    point /etc/os-release back at AlmaLinux's file
+set -eu
+
+ENVY_VERSION="@VERSION@"
+SRC="${SRC:-/usr/lib/os-release}"
+DST="${DST:-/etc/os-release}"
+
+if [ "${1:-}" = --restore ]; then
+    ln -sfn ../usr/lib/os-release "$DST"
+    exit 0
+fi
+[ -f "$SRC" ] || exit 0
+
+# Read AlmaLinux's values in subshells: os-release's VERSION must not clobber ours.
+# shellcheck disable=SC1090
+base_name=$(. "$SRC" && printf '%s' "${NAME:-AlmaLinux}")
+# shellcheck disable=SC1090
+base_version_id=$(. "$SRC" && printf '%s' "${VERSION_ID:-}")
+
+tmp=$(mktemp "${DST%/*}/.os-release.XXXXXX")
+trap 'rm -f "$tmp"' EXIT
+{
+    echo "# ENVY BLACK VEIL on $base_name $base_version_id: $SRC with BLACK VEIL's name,"
+    echo "# written by envy-black-veil-release (envy-os-release) whenever either changes."
+    grep -v -E '^(#|NAME=|VERSION=|PRETTY_NAME=|ANSI_COLOR=|LOGO=|HOME_URL=|DOCUMENTATION_URL=|BUG_REPORT_URL=)' "$SRC"
+    echo "NAME=\"ENVY BLACK VEIL\""
+    echo "VERSION=\"$ENVY_VERSION (on $base_name $base_version_id)\""
+    echo "PRETTY_NAME=\"ENVY BLACK VEIL $ENVY_VERSION ($base_name $base_version_id)\""
+    echo "ANSI_COLOR=\"38;2;255;61;180\""
+    echo "LOGO=\"envy-black-veil\""
+    echo "HOME_URL=\"https://github.com/xzchick/envy-black-veil\""
+    echo "DOCUMENTATION_URL=\"https://github.com/xzchick/envy-black-veil/tree/main/docs\""
+    echo "BUG_REPORT_URL=\"https://github.com/xzchick/envy-black-veil/issues\""
+} > "$tmp"
+chmod 0644 "$tmp"
+mv -f "$tmp" "$DST"
+trap - EXIT
+if command -v restorecon > /dev/null 2>&1; then
+    restorecon "$DST" 2> /dev/null || :
+fi

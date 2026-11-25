@@ -225,6 +225,14 @@ EOF
 cp -a /usr/share/icons/hicolor/scalable/apps/org.fedoraproject.AnacondaInstaller.svg \
   /usr/share/icons/hicolor/48x48/apps/ 2>/dev/null || :
 sed -i 's/^Name=.*/Name=Install ENVY BLACK VEIL/' /usr/share/applications/liveinst.desktop
+# The installer calls itself ENVY BLACK VEIL: on its screens, and on the computer's
+# boot-menu entry it creates. liveinst takes the name from /etc/system-release, which
+# stays AlmaLinux's for compatibility; AlmaLinux's installer settings still apply, as
+# Anaconda picks them by os-release's ID. Stop the build if liveinst has changed.
+envy_version=$(rpm -q --qf '%{VERSION}' envy-black-veil-release)
+sed -i -E -e 's/^([[:space:]]*ANACONDA_PRODUCTNAME=).*/\1"ENVY BLACK VEIL"/' \
+    -e "s/^([[:space:]]*ANACONDA_PRODUCTVERSION=).*/\1\"$envy_version\"/" /usr/bin/liveinst
+grep -q '^[[:space:]]*ANACONDA_PRODUCTNAME="ENVY BLACK VEIL"$' /usr/bin/liveinst || exit 1
 
 # Welcome note for the first terminal
 cat > /etc/motd << 'EOF'

@@ -65,7 +65,8 @@ report() {
     now=$(date -u '+%Y-%m-%d %H:%M UTC')
     version=$(cat /etc/envy-black-veil-release 2> /dev/null || echo "not ENVY BLACK VEIL")
     # shellcheck disable=SC1091
-    base=$( (. /etc/os-release 2> /dev/null && echo "${PRETTY_NAME:-unknown}") || echo unknown)
+    # The base system as AlmaLinux names it (/etc/os-release carries BLACK VEIL's name).
+    base=$( (. /usr/lib/os-release 2> /dev/null && echo "${PRETTY_NAME:-unknown}") || echo unknown)
     kernel=$(uname -r)
     if [ -d /sys/firmware/efi ]; then
         boot=UEFI

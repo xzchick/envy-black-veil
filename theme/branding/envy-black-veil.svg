@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+  <!-- The ENVY BLACK VEIL mark: a neon E on the night-blue tile. Shapes only, no text,
+       so it draws the same without fonts (os-release LOGO, KDE's About this System). -->
+  <defs>
+    <linearGradient id="e" gradientUnits="userSpaceOnUse" x1="70" y1="58" x2="190" y2="198">
+      <stop offset="0" stop-color="#35e8ff"/>
+      <stop offset="0.55" stop-color="#f2f4ff"/>
+      <stop offset="1" stop-color="#ff3db4"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.45" r="0.6">
+      <stop offset="0" stop-color="#2a1a55"/>
+      <stop offset="1" stop-color="#050713"/>
+    </radialGradient>
+  </defs>
+  <rect x="8" y="8" width="240" height="240" rx="56" fill="url(#glow)"/>
+  <rect x="10" y="10" width="236" height="236" rx="54" fill="none" stroke="#ac8cff" stroke-opacity="0.55" stroke-width="4"/>
+  <g fill="url(#e)">
+    <rect x="70" y="58" width="30" height="140" rx="7"/>
+    <rect x="70" y="58" width="120" height="30" rx="7"/>
+    <rect x="70" y="113" width="92" height="30" rx="7"/>
+    <rect x="70" y="168" width="120" height="30" rx="7"/>
+  </g>
+  <rect x="70" y="214" width="120" height="4" rx="2" fill="#ff3db4" fill-opacity="0.85"/>
+</svg>

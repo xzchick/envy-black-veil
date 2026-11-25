@@ -24,7 +24,10 @@ jobs:
         run: ksvalidator kickstart/envy-black-veil.ks
 
       - name: ShellCheck the scripts
-        run: shellcheck -e SC2059 tools/envy-tools tools/envy-hardware-report build/build-iso.sh ci/build-in-vm.sh try-black-veil.sh live/dracut/90envy-live-persist/*.sh repo/publish.sh
+        run: |
+          shellcheck -e SC2059 tools/envy-tools tools/envy-hardware-report tools/envy-os-release \
+            build/build-iso.sh ci/build-in-vm.sh try-black-veil.sh repo/publish.sh \
+            live/dracut/90envy-live-persist/*.sh theme/kernel/96-envy-black-veil-title.install
 
       - name: Check the Python scripts compile
         run: python3 -m py_compile ci/boot-test.py ci/sbom.py build/lorax-templates.py
@@ -38,7 +41,8 @@ jobs:
             theme/plymouth/envy-black-veil/spark.svg \
             theme/plymouth/envy-black-veil/prompt.svg \
             theme/plymouth/envy-black-veil/entry.svg \
-            theme/plymouth/envy-black-veil/bullet.svg
+            theme/plymouth/envy-black-veil/bullet.svg \
+            theme/branding/envy-black-veil.svg
 
       - name: Validate JSON config
         run: |

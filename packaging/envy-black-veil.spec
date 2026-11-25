@@ -6,7 +6,7 @@
 
 Name:           envy-black-veil
 Version:        0.1.0
-Release:        5%{?dist}
+Release:        6%{?dist}
 Summary:        ENVY BLACK VEIL identity: theme and release identity
 License:        MIT
 URL:            https://github.com/xzchick/envy-black-veil
@@ -41,7 +41,10 @@ dark defaults in /etc/skel.
 Summary:        ENVY BLACK VEIL release file, update repository, envy-tools and the hardware report
 
 %description release
-Marks the system as ENVY BLACK VEIL (/etc/envy-black-veil-release), installs
+Gives the system BLACK VEIL's name: /etc/os-release becomes AlmaLinux's own with
+BLACK VEIL's NAME, VERSION, PRETTY_NAME and logo (ID, VERSION_ID and the rest stay
+AlmaLinux's, for compatibility), rewritten whenever AlmaLinux updates it, plus
+/etc/envy-black-veil-release. It installs
 `envy-tools`, the on-demand installer for the ENVY application suite, and
 `envy-hardware-report` (the menu's Hardware Report), which describes this computer's
 hardware for a BLACK VEIL hardware report without anything that identifies you; and sets
@@ -83,6 +86,7 @@ rsvg-convert -w 440 -h 52  theme/plymouth/envy-black-veil/entry.svg  -o theme/pl
 rsvg-convert -w 14  -h 14  theme/plymouth/envy-black-veil/bullet.svg -o theme/plymouth/envy-black-veil/bullet.png
 rsvg-convert -w 1920 -h 1080 theme/grub/envy-black-veil/background.svg -o theme/grub/envy-black-veil/background.png
 rsvg-convert -w 2560 -h 1440 theme/wallpaper/envy-black-veil.svg -o wallpaper-2560x1440.png
+rsvg-convert -w 256 -h 256 theme/branding/envy-black-veil.svg -o envy-black-veil-logo.png
 
 # GRUB can't read TrueType: convert DejaVu to GRUB's .pf2 fonts. -n sets the family;
 # GRUB names each font "<family> <Regular|Bold> <size>", which is what theme.txt
@@ -135,12 +139,22 @@ install -Dm644 theme/plasma/updates/envy-black-veil-wallpaper.js \
 # Dark defaults for every new user
 install -Dm644 theme/skel/.config/kdeglobals %{buildroot}%{_sysconfdir}/skel/.config/kdeglobals
 install -Dm644 theme/skel/.config/konsolerc  %{buildroot}%{_sysconfdir}/skel/.config/konsolerc
+install -Dm644 theme/skel/.config/kcm-about-distrorc %{buildroot}%{_sysconfdir}/skel/.config/kcm-about-distrorc
 
 # --- release -------------------------------------------------------------
 install -d %{buildroot}%{_sysconfdir}
 echo "ENVY BLACK VEIL release %{version} (Nebula) — AlmaLinux 10 + KDE Plasma 6" \
     > %{buildroot}%{_sysconfdir}/envy-black-veil-release
 install -Dm755 tools/envy-tools   %{buildroot}%{_bindir}/envy-tools
+# BLACK VEIL's name in /etc/os-release (see %%triggerin below), and its logo
+install -Dm755 tools/envy-os-release %{buildroot}%{_libexecdir}/envy-black-veil/envy-os-release
+sed -i 's/@VERSION@/%{version}/' %{buildroot}%{_libexecdir}/envy-black-veil/envy-os-release
+install -Dm644 theme/branding/envy-black-veil.svg \
+    %{buildroot}%{_datadir}/icons/hicolor/scalable/apps/envy-black-veil.svg
+install -Dm644 envy-black-veil-logo.png %{buildroot}%{_datadir}/pixmaps/envy-black-veil.png
+# mcelog doesn't support current AMD processors: skip it there instead of failing
+install -Dm644 tools/systemd/mcelog-skip-on-amd.conf \
+    %{buildroot}%{_prefix}/lib/systemd/system/mcelog.service.d/50-envy-skip-on-amd.conf
 install -Dm755 tools/envy-hardware-report %{buildroot}%{_bindir}/envy-hardware-report
 install -Dm644 tools/desktop/envy-hardware-report.desktop \
     %{buildroot}%{_datadir}/applications/envy-hardware-report.desktop
@@ -158,6 +172,16 @@ install -m755 live/dracut/90envy-live-persist/module-setup.sh \
     live/dracut/90envy-live-persist/envy-persist-genrules.sh \
     live/dracut/90envy-live-persist/create-envy-persistence.sh \
     %{buildroot}%{_prefix}/lib/dracut/modules.d/90envy-live-persist/
+
+# BLACK VEIL's name in /etc/os-release: written when this package is installed or
+# updated, and again whenever almalinux-release (re)writes AlmaLinux's own.
+%triggerin release -- almalinux-release
+%{_libexecdir}/envy-black-veil/envy-os-release || :
+
+%postun release
+if [ $1 -eq 0 ]; then
+    ln -sfn ../usr/lib/os-release %{_sysconfdir}/os-release || :
+fi
 
 %post theme
 if [ $1 -ge 1 ] && command -v plymouth-set-default-theme >/dev/null 2>&1; then
@@ -178,12 +202,18 @@ fi
 %{_prefix}/lib/kernel/install.d/96-envy-black-veil-title.install
 %{_sysconfdir}/skel/.config/kdeglobals
 %{_sysconfdir}/skel/.config/konsolerc
+%{_sysconfdir}/skel/.config/kcm-about-distrorc
 
 %files release
 %license LICENSE
 %config(noreplace) %{_sysconfdir}/envy-black-veil-release
 %{_bindir}/envy-tools
 %{_bindir}/envy-hardware-report
+%{_libexecdir}/envy-black-veil/
+%{_datadir}/icons/hicolor/scalable/apps/envy-black-veil.svg
+%{_datadir}/pixmaps/envy-black-veil.png
+%dir %{_prefix}/lib/systemd/system/mcelog.service.d
+%{_prefix}/lib/systemd/system/mcelog.service.d/50-envy-skip-on-amd.conf
 %{_datadir}/applications/envy-hardware-report.desktop
 %config(noreplace) %{_sysconfdir}/NetworkManager/conf.d/90-envy-privacy.conf
 %dir %{_sysconfdir}/firefox
@@ -198,6 +228,14 @@ fi
 %{_prefix}/lib/dracut/modules.d/90envy-live-persist/
 
 %changelog
+* Wed Nov 25 2026 Envy <235594225+xzchick@users.noreply.github.com> - 0.1.0-6
+- BLACK VEIL's own release identity: /etc/os-release is AlmaLinux's with BLACK
+  VEIL's NAME, VERSION, PRETTY_NAME, logo and links (ID, VERSION_ID, CPE and the
+  rest stay AlmaLinux's), rewritten whenever almalinux-release updates it.
+- The ENVY mark as the system logo, and on KDE's About this System for new users.
+- mcelog isn't started on AMD processors, which it doesn't support (it failed there
+  and left the system "degraded"); the kernel's EDAC driver covers them.
+
 * Wed Nov 25 2026 Envy <235594225+xzchick@users.noreply.github.com> - 0.1.0-5
 - The release package adds BLACK VEIL's signed package repository on GitHub Pages
   and its public key (RSA 4096, 3F39 076E 0B4B 41F4 23CA 374A B1DD ECDE 888D
