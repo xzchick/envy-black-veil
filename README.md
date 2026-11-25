@@ -19,7 +19,23 @@
   <img src="https://img.shields.io/badge/license-MIT-ac8cff?style=flat-square&labelColor=050713" alt="MIT license" />
 </p>
 
-> **Early but real.** This repository is the **complete, buildable build system** for the OS — the Kickstart, the ENVY theme, the installer branding and the tooling — not a mock-up. It is a young `v0.1.0`: the ISO is built on a Linux host (see [docs/building.md](docs/building.md)), and full installed-system acceptance on varied hardware is still ongoing.
+> **Built and tested by CI.** Every change builds the ISO in an AlmaLinux 10 VM and boots it in VMs ([ISO workflow](https://github.com/xzchick/envy-black-veil/actions/workflows/iso.yml)): UEFI boot through its own boot menu, the live KDE desktop logging in by itself, SELinux enforcing, the firewall closed, **nothing listening on the network**, and the ENVY look in place. An automated encrypted install and an ARM (Apple Silicon) build are being brought up in CI now; real-hardware testing comes after. It's a young `v0.1.0`.
+
+<p align="center">
+  <img src="assets/screenshots/live-desktop.png" width="92%" alt="The ENVY BLACK VEIL live desktop as CI boots it in a VM: the ENVY wallpaper, dark neon colours, the Install ENVY BLACK VEIL icon and KDE's Welcome Center" />
+  <br /><sub>The live desktop, exactly as CI boots it in a VM (QEMU/KVM, UEFI). The Welcome Center names AlmaLinux because BLACK VEIL keeps AlmaLinux's release identity underneath — see the roadmap.</sub>
+</p>
+
+## Try it
+
+On **Windows, macOS or Linux** — in a virtual machine (nothing on your computer changes) or from a USB stick:
+
+```sh
+./try-black-veil.sh envy-black-veil-0.1.0-x86_64.iso     # macOS (Intel) or Linux, with QEMU
+./try-black-veil.sh envy-black-veil-0.1.0-aarch64.iso    # Apple Silicon Mac, once the ARM build is up
+```
+
+Step by step for **UTM, Parallels, VMware, Hyper-V, VirtualBox, GNOME Boxes and virt-manager**, plus USB sticks: **[docs/try-it.md](docs/try-it.md)**. The ISO comes from the latest green [ISO workflow run](https://github.com/xzchick/envy-black-veil/actions/workflows/iso.yml) (its *envy-black-veil-iso* artifact, with a SHA-256 file); a signed release download is on the roadmap.
 
 ---
 
@@ -79,9 +95,9 @@ CYAN #35e8ff   LAVENDER #ac8cff   VIOLET #8547e8   GREEN #49e3a6
 
 ## Encrypted & offline by design
 
-- **SELinux enforcing**, the **firewall on**, and **nothing listening** (`sshd`, `cups` off by default). Turn on only what you need.
-- **Full-disk LUKS encryption** offered in the installer — the boot splash prompts for the passphrase.
-- No telemetry, no accounts, no phone-home. Every ENVY tool works with **no network**.
+- **SELinux enforcing**, the **firewall on with nothing open**, and **nothing listening on the network** — checked by CI on every build. SSH, printing (CUPS), network discovery (Avahi), the Cockpit web console and KDE Connect are off or left out; turn on only what you need.
+- **Full-disk LUKS encryption** offered in the installer — the ENVY boot splash prompts for the passphrase.
+- No telemetry, no accounts, no phone-home. Every ENVY app except Recon and Tunnel works with **no network** at all.
 
 ---
 
@@ -91,22 +107,24 @@ BLACK VEIL is meant to be portable — installed onto an external drive you carr
 
 ### → [docs/install-to-external-drive.md](docs/install-to-external-drive.md)
 
-Short version: write the ISO to a USB stick, boot it, run the ENVY installer, pick your **external drive** as both the install target **and** the bootloader location, optionally encrypt it, install, and add your tools with `envy-tools`.
+Short version: write the ISO to a USB stick, boot it, run **Install ENVY BLACK VEIL** (AlmaLinux's Anaconda installer), select only your **external drive** so the boot loader goes there too, optionally encrypt it, install, and add your tools with `envy-tools`.
 
 ---
 
 ## Build it
 
-The OS is built on a Linux host (AlmaLinux 10 / RHEL 10 / Fedora):
+The OS is built the way AlmaLinux builds its own live media, on an AlmaLinux 10 machine or VM (x86_64 or aarch64):
 
 ```sh
-sudo dnf install -y lorax rpm-build createrepo_c pykickstart librsvg2-tools epel-release
+sudo dnf install -y epel-release
+sudo dnf install -y lorax lorax-templates-almalinux anaconda rpm-build createrepo_c pykickstart \
+    librsvg2-tools grub2-tools-extra dejavu-sans-fonts
 git clone https://github.com/xzchick/envy-black-veil.git
 cd envy-black-veil
-sudo ./build/build-iso.sh          # -> output/envy-black-veil-0.1.0-x86_64.iso
+sudo ./build/build-iso.sh          # -> output/envy-black-veil-0.1.0-<arch>.iso
 ```
 
-`build/build-iso.sh` builds the ENVY identity RPMs (theme, release, Calamares branding), publishes them to a local repo, and runs `livemedia-creator` against [`kickstart/envy-black-veil.ks`](kickstart/envy-black-veil.ks). Lint everything anywhere with `make validate`; CI runs it on every push. Full details in [docs/building.md](docs/building.md).
+`build/build-iso.sh` builds the ENVY identity RPMs (theme and release file), publishes them to a local repo, and runs `livemedia-creator --no-virt` against [`kickstart/envy-black-veil.ks`](kickstart/envy-black-veil.ks). CI does exactly this in a throwaway AlmaLinux 10 VM, then boots the ISO and checks it. Lint everything anywhere with `make validate`. Full details in [docs/building.md](docs/building.md).
 
 ---
 
@@ -116,20 +134,24 @@ sudo ./build/build-iso.sh          # -> output/envy-black-veil-0.1.0-x86_64.iso
 | :--- | :--- |
 | Live-ISO definition | [`kickstart/envy-black-veil.ks`](kickstart/envy-black-veil.ks) |
 | ENVY theme (Plasma, SDDM, Plymouth, GRUB, Konsole, wallpaper) | [`theme/`](theme) |
-| Identity RPMs (theme / release / Calamares branding) | [`packaging/envy-black-veil.spec`](packaging/envy-black-veil.spec) |
-| Installer branding & module sequence | [`installer/calamares/`](installer/calamares) |
+| Identity RPMs (theme, release file, Anaconda GRUB hook) | [`packaging/envy-black-veil.spec`](packaging/envy-black-veil.spec) |
 | `envy-tools` on-demand app installer | [`tools/envy-tools`](tools/envy-tools) |
 | ISO build script + Makefile | [`build/build-iso.sh`](build/build-iso.sh) |
-| Docs (external-drive, building, customizing) | [`docs/`](docs) |
+| CI: build in a VM, boot and check the ISO | [`ci/`](ci) · [ISO workflow](.github/workflows/iso.yml) |
+| Try it in a VM with one command (macOS, Linux) | [`try-black-veil.sh`](try-black-veil.sh) |
+| Docs (try it, external drive, building, customizing) | [`docs/`](docs) |
 
 ---
 
 ## Roadmap
 
-- [ ] Full installed-system and KDE Plasma acceptance in a disposable VM and on real hardware.
-- [ ] Signed packages and a hosted update repo.
+- [x] The ISO builds for real in CI, and boots via UEFI to the live KDE desktop with the ENVY look, SELinux enforcing, the firewall closed and nothing listening.
+- [ ] Automated encrypted install and installed-system boot test in CI (in progress).
+- [ ] aarch64 ISO for Apple Silicon Macs and ARM PCs (in progress).
+- [ ] Acceptance on real hardware.
+- [ ] Signed packages and a hosted update repo — and with it BLACK VEIL's own release identity (os-release), which needs that repo to stay in step with AlmaLinux's updates.
 - [ ] A published, verified ISO release with checksums.
-- [ ] Secure Boot signing for broad out-of-the-box UEFI boot.
+- [ ] Secure Boot: BLACK VEIL uses AlmaLinux's signed boot chain unchanged; verify it boots with Secure Boot on.
 - [ ] Optional persistence tuning for USB-stick live use.
 
 <p align="center"><sub>MIT licensed. Created by <a href="https://github.com/xzchick">Envy (@xzchick)</a>. Built on AlmaLinux and KDE; the ENVY identity, theme and tooling are my own.</sub></p>
