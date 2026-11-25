@@ -147,7 +147,7 @@ COPYFILE_DISABLE=1 tar -C "$HERE" --no-xattrs --exclude=./.git --exclude=./outpu
     | vm 'rm -rf src && mkdir src && tar -xzf - -C src' || die "copying the repository failed"
 
 say "Installing the build tools in the VM (lorax, anaconda, rpm-build, …)"
-vm 'sudo dnf -y -q install epel-release && sudo dnf -y install lorax lorax-templates-almalinux anaconda rpm-build createrepo_c pykickstart librsvg2-tools grub2-tools-extra dejavu-sans-fonts libblockdev-nvme zstd' \
+vm 'sudo dnf -y -q install epel-release && sudo dnf -y install lorax lorax-templates-almalinux anaconda rpm-build createrepo_c pykickstart librsvg2-tools grub2-tools-extra dejavu-sans-fonts dejavu-sans-mono-fonts libblockdev-nvme zstd' \
     > "$OUT/vm-setup.log" 2>&1 || { tail -n 40 "$OUT/vm-setup.log"; die "installing the build tools failed"; }
 
 say "Building the ISO in the VM (this is the long part)"

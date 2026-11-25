@@ -14,7 +14,7 @@
 #
 #   sudo dnf install -y epel-release
 #   sudo dnf install -y lorax lorax-templates-almalinux anaconda rpm-build \
-#        createrepo_c pykickstart librsvg2-tools grub2-tools-extra dejavu-sans-fonts
+#        createrepo_c pykickstart librsvg2-tools grub2-tools-extra dejavu-sans-fonts dejavu-sans-mono-fonts
 #   sudo ./build/build-iso.sh
 #
 # Env overrides: VERSION, ARCH, RELEASEVER, OUTDIR, ISO_NAME, VOLID.
@@ -42,7 +42,7 @@ die() { printf "\033[38;5;205mbuild-iso:\033[0m %s\n" "$*" >&2; exit 1; }
 [ "$(uname -m)" = "$ARCH" ] || die "build $ARCH images on an $ARCH host (this one is $(uname -m))."
 [ "${#VOLID}" -le 32 ] || die "volume ID '$VOLID' is longer than 32 characters."
 for t in rpmbuild createrepo_c livemedia-creator ksvalidator rsvg-convert curl python3; do
-    command -v "$t" >/dev/null || die "missing '$t'. Install: lorax lorax-templates-almalinux anaconda rpm-build createrepo_c pykickstart librsvg2-tools grub2-tools-extra dejavu-sans-fonts (see the top of this script)."
+    command -v "$t" >/dev/null || die "missing '$t'. Install: lorax lorax-templates-almalinux anaconda rpm-build createrepo_c pykickstart librsvg2-tools grub2-tools-extra dejavu-sans-fonts dejavu-sans-mono-fonts (see the top of this script)."
 done
 # Read the host's identity in a subshell: /etc/os-release defines VERSION, ID and
 # friends, which must not overwrite this script's own VERSION.

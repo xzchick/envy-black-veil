@@ -60,7 +60,7 @@ On Windows Home, use VirtualBox or VMware Workstation (section 3).
 
 ## 3. Your platform's own VM apps
 
-> CI boots, installs and re-boots BLACK VEIL in QEMU/KVM with UEFI firmware on every change. The steps below are each app's standard way to run an AlmaLinux 10 KDE live ISO; they aren't machine-tested by CI.
+> On every change CI boots, installs and re-boots BLACK VEIL in QEMU/KVM with UEFI firmware, with and without Secure Boot (Microsoft's keys, as Hyper-V and most PCs have them), and the aarch64 ISO is installed and booted the same way on an Apple Silicon Mac. On Windows, CI creates the Hyper-V VM with `try-black-veil.ps1` and checks every setting (GitHub's machines can't start it). The other apps below are each one's standard way to run an AlmaLinux 10 KDE live ISO; they aren't machine-tested.
 
 ### macOS
 
@@ -69,7 +69,7 @@ On Windows Home, use VirtualBox or VMware Workstation (section 3).
 
 ### Windows
 
-- **Hyper-V** (Windows Pro/Enterprise) — *New Virtual Machine* → **Generation 2** → 6144 MB → *Default Switch* → new 40 GB disk → install from the x86_64 ISO. Then *Settings → Security*: keep Secure Boot on with the **Microsoft UEFI Certificate Authority** template (BLACK VEIL uses AlmaLinux's signed boot chain), or turn Secure Boot off if it won't start.
+- **Hyper-V** (Windows Pro/Enterprise) — *New Virtual Machine* → **Generation 2** → 6144 MB → *Default Switch* → new 40 GB disk → install from the x86_64 ISO. Then *Settings → Security*: keep Secure Boot on with the **Microsoft UEFI Certificate Authority** template; BLACK VEIL boots with AlmaLinux's signed boot chain, and CI checks it with Secure Boot on. (`try-black-veil.ps1` sets all of this for you.)
 - **VirtualBox** (free) — *New* → ISO: the x86_64 ISO → Type **Linux**, Version **Red Hat (64-bit)** → tick **Enable EFI** → 6144 MB, 4 CPUs → 40 GB disk. In *Display*, give it 128 MB video memory with **VMSVGA**.
 - **VMware Workstation Pro** (free for personal use) — *Create a New Virtual Machine* → the x86_64 ISO → **Red Hat Enterprise Linux 9 64-bit** (or "Other Linux 6.x 64-bit") → 40 GB → *Customize Hardware*: 6 GB RAM, 4 CPUs; *Options → Advanced → Firmware: UEFI*.
 - **WSL** can't boot a desktop OS ISO; use one of the above.

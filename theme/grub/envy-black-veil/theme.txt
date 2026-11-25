@@ -1,12 +1,13 @@
 # ENVY BLACK VEIL — GRUB2 theme
-# background.png is rendered from background.svg at package-build time.
+# background.png is rendered from background.svg at package-build time. Font names
+# are what GRUB calls the .pf2 files the spec builds: "<family> <Regular|Bold> <size>".
 
 desktop-image: "background.png"
 desktop-color: "#050713"
 title-text: ""
 message-color: "#b9c3df"
 message-bg-color: "#050713"
-terminal-font: "Unifont Regular 16"
+terminal-font: "DejaVu Sans Mono Regular 16"
 
 # --- Brand line -------------------------------------------------------------
 + label {
@@ -24,17 +25,17 @@ terminal-font: "Unifont Regular 16"
     width = 100%
     align = "center"
     color = "#35e8ff"
-    font = "DejaVu Sans 13"
+    font = "DejaVu Sans Regular 13"
     text = "a Linux world of my own"
 }
 
 # --- Boot menu --------------------------------------------------------------
 + boot_menu {
-    left = 25%
-    width = 50%
+    left = 15%
+    width = 70%
     top = 34%
     height = 46%
-    item_font = "DejaVu Sans 16"
+    item_font = "DejaVu Sans Regular 16"
     item_color = "#b9c3df"
     selected_item_color = "#050713"
     item_height = 40
@@ -54,7 +55,7 @@ terminal-font: "Unifont Regular 16"
     align = "center"
     id = "__timeout__"
     color = "#6f7898"
-    font = "DejaVu Sans 12"
+    font = "DejaVu Sans Regular 12"
     text = "Booting in %d s  —  any key to choose"
 }
 

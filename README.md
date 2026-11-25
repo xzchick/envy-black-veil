@@ -19,11 +19,23 @@
   <img src="https://img.shields.io/badge/license-MIT-ac8cff?style=flat-square&labelColor=050713" alt="MIT license" />
 </p>
 
-> **Built and tested by CI.** Every change builds the ISO in an AlmaLinux 10 VM and boots it in VMs ([ISO workflow](https://github.com/xzchick/envy-black-veil/actions/workflows/iso.yml)): UEFI boot through its own boot menu, the live KDE desktop logging in by itself, SELinux enforcing, the firewall closed, **nothing listening on the network**, and the ENVY look in place. An automated encrypted install and an ARM (Apple Silicon) build are being brought up in CI now; real-hardware testing comes after. It's a young `v0.1.0`.
+> **Built and tested end to end, for PCs and Apple Silicon.** Every change builds the ISO for **x86_64** and **aarch64** and boots it in VMs ([ISO workflow](https://github.com/xzchick/envy-black-veil/actions/workflows/iso.yml)): UEFI through its own boot menu, **also with Secure Boot on**; the live KDE desktop logging in by itself; SELinux enforcing, the firewall closed, **nothing listening and nothing phoning home**. Then it **installs BLACK VEIL unattended** onto a blank disk with LUKS2 encryption, boots the installed disk on fresh firmware, types the passphrase into the ENVY splash, checks the installed system the same way and signs in on the ENVY login screen. Real-hardware testing comes next. It's a young `v0.1.0`.
 
 <p align="center">
-  <img src="assets/screenshots/live-desktop.png" width="92%" alt="The ENVY BLACK VEIL live desktop as CI boots it in a VM: the ENVY wallpaper, dark neon colours, the Install ENVY BLACK VEIL icon and KDE's Welcome Center" />
-  <br /><sub>The live desktop, exactly as CI boots it in a VM (QEMU/KVM, UEFI). The Welcome Center names AlmaLinux because BLACK VEIL keeps AlmaLinux's release identity underneath — see the roadmap.</sub>
+  <img src="assets/screenshots/live-desktop.png" width="92%" alt="The ENVY BLACK VEIL live desktop: the ENVY wallpaper with the wordmark over a neon nebula and grid, the Install ENVY BLACK VEIL icon and a dark Plasma panel" />
+  <br /><sub>The live desktop as the automated test boots it (aarch64 on an Apple Silicon Mac).</sub>
+</p>
+
+<p align="center">
+  <img src="assets/screenshots/boot-passphrase.png" width="49%" alt="The ENVY boot splash on an encrypted install asking for the disk passphrase: a lock, ENTER YOUR DISK PASSPHRASE, and an input box with five pink dots" />
+  <img src="assets/screenshots/login.png" width="49%" alt="The ENVY login screen: ENVY BLACK VEIL, the user and password fields, a pink Unlock button and Encrypted desktop, nothing leaves this machine" />
+  <br /><sub>An installed system: the ENVY splash asks for the disk passphrase, then the ENVY login screen. Screenshots from the automated install test.</sub>
+</p>
+
+<p align="center">
+  <img src="assets/screenshots/boot-menu.png" width="49%" alt="The ENVY GRUB boot menu: ENVY BLACK VEIL, a Linux world of my own, entries named ENVY BLACK VEIL, and a pink countdown bar over the neon nebula" />
+  <img src="assets/screenshots/installed-desktop.png" width="49%" alt="The installed ENVY BLACK VEIL desktop after signing in: the ENVY wallpaper and a dark Plasma panel" />
+  <br /><sub>The installed system's ENVY boot menu, and its desktop after signing in.</sub>
 </p>
 
 ## Try it
@@ -133,7 +145,7 @@ Or directly on an AlmaLinux 10 machine or VM (x86_64 or aarch64), the way AlmaLi
 ```sh
 sudo dnf install -y epel-release
 sudo dnf install -y lorax lorax-templates-almalinux anaconda rpm-build createrepo_c pykickstart \
-    librsvg2-tools grub2-tools-extra dejavu-sans-fonts
+    librsvg2-tools grub2-tools-extra dejavu-sans-fonts dejavu-sans-mono-fonts
 git clone https://github.com/xzchick/envy-black-veil.git
 cd envy-black-veil
 sudo ./build/build-iso.sh          # -> output/envy-black-veil-0.1.0-<arch>.iso
@@ -163,12 +175,13 @@ sudo ./build/build-iso.sh          # -> output/envy-black-veil-0.1.0-<arch>.iso
 ## Roadmap
 
 - [x] The ISO builds for real in CI, and boots via UEFI to the live KDE desktop with the ENVY look, SELinux enforcing, the firewall closed and nothing listening.
-- [ ] Automated encrypted install and installed-system boot test in CI (in progress).
-- [ ] aarch64 ISO for Apple Silicon Macs and ARM PCs (in progress).
+- [x] Automated encrypted install and installed-system test: unattended LUKS2 install, the ENVY splash and login screen, and the same privacy checks on the installed system.
+- [x] aarch64 ISO for Apple Silicon Macs and ARM PCs.
+- [x] Secure Boot: AlmaLinux's signed boot chain, unchanged, boots the live ISO and installed systems with Secure Boot on (Microsoft's keys), with the kernel locked down.
+- [x] Nothing phones home by default, and each ISO under GitHub's 2 GiB file limit, with a package list and SBOM.
+- [ ] A published, verified ISO release (signed checksums, SBOMs): the [release workflow](.github/workflows/release.yml) is ready; it publishes only ISOs that pass every check.
 - [ ] Acceptance on real hardware.
-- [ ] Signed packages and a hosted update repo — and with it BLACK VEIL's own release identity (os-release), which needs that repo to stay in step with AlmaLinux's updates.
-- [ ] A published, verified ISO release with checksums.
-- [ ] Secure Boot: BLACK VEIL uses AlmaLinux's signed boot chain unchanged; verify it boots with Secure Boot on.
+- [ ] Signed packages and a hosted update repo, and with it BLACK VEIL's own release identity (os-release), which needs that repo to stay in step with AlmaLinux's updates.
 - [ ] Optional persistence tuning for USB-stick live use.
 
 <p align="center"><sub>MIT licensed. Created by <a href="https://github.com/xzchick">Envy (@xzchick)</a>. Built on AlmaLinux and KDE; the ENVY identity, theme and tooling are my own.</sub></p>

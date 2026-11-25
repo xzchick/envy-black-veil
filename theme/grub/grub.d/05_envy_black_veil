@@ -25,11 +25,6 @@ case "x${GRUB_TERMINAL_OUTPUT}" in
     *gfxterm*) [ -n "${GRUB_THEME}" ] && exit 0 ;;
 esac
 
-outputs=gfxterm
-case "x${GRUB_TERMINAL} ${GRUB_TERMINAL_OUTPUT}" in
-    *serial*) outputs="gfxterm serial" ;;
-esac
-
 gettext_printf "Found ENVY BLACK VEIL theme: %s\n" "$theme" >&2
 echo "### ENVY BLACK VEIL boot menu ###"
 echo "set envy_saved_root=\"\$root\""
@@ -44,7 +39,13 @@ for font in "$(dirname "$theme")"/*.pf2; do
     fi
 done
 echo "if [ x\$gfxmode = x ]; then set gfxmode=auto; fi"
-echo "terminal_output ${outputs}"
+echo "terminal_output gfxterm"
+# Keep a serial console where one is set up, as a separate step: where GRUB has no
+# serial terminal (as on many ARM machines) that step fails on its own and the
+# themed screen stays.
+case "x${GRUB_TERMINAL} ${GRUB_TERMINAL_OUTPUT}" in
+    *serial*) echo "terminal_output --append serial" ;;
+esac
 echo "set theme=(\$root)$(make_system_path_relative_to_its_root "$theme")"
 echo "export theme"
 echo "set root=\"\$envy_saved_root\""

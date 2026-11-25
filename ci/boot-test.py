@@ -512,7 +512,8 @@ def boot_real(args, out: Path) -> list[str]:
     proc, qmp = start_qemu(args, out, "boot1", ovmf(out / "OVMF_VARS_boot1.fd"))
     shots, start = [], time.monotonic()
     try:
-        while time.monotonic() - start < args.real_boot_seconds * args.slow:
+        # Emulated VMs get longer, but not unbounded: boot 2 checks the desktop anyway.
+        while time.monotonic() - start < min(args.real_boot_seconds * args.slow, 1200):
             t = int(time.monotonic() - start)
             png = out / f"boot1-{t:03d}s.png"
             if qmp.screenshot(png):

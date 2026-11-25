@@ -15,6 +15,7 @@ BuildArch:      noarch
 BuildRequires:  librsvg2-tools
 BuildRequires:  grub2-tools-extra
 BuildRequires:  dejavu-sans-fonts
+BuildRequires:  dejavu-sans-mono-fonts
 
 %description
 Metapackage shell. Install the envy-black-veil-theme and envy-black-veil-release
@@ -61,15 +62,18 @@ rsvg-convert -w 14  -h 14  theme/plymouth/envy-black-veil/bullet.svg -o theme/pl
 rsvg-convert -w 1920 -h 1080 theme/grub/envy-black-veil/background.svg -o theme/grub/envy-black-veil/background.png
 rsvg-convert -w 2560 -h 1440 theme/wallpaper/envy-black-veil.svg -o wallpaper-2560x1440.png
 
-# GRUB can't read TrueType: convert DejaVu to GRUB's .pf2 fonts, named exactly as
-# theme.txt asks for them. (grub-mkfont/fonts paths differ on Debian-based CI.)
+# GRUB can't read TrueType: convert DejaVu to GRUB's .pf2 fonts. -n sets the family;
+# GRUB names each font "<family> <Regular|Bold> <size>", which is what theme.txt
+# asks for ("DejaVu Sans Regular 16"). (grub-mkfont/fonts paths differ on Debian CI.)
 MKFONT=$(command -v grub2-mkfont || command -v grub-mkfont)
 SANS=$(find /usr/share/fonts -name DejaVuSans.ttf | head -n 1)
 SANSB=$(find /usr/share/fonts -name DejaVuSans-Bold.ttf | head -n 1)
-$MKFONT -n "DejaVu Sans 12" -s 12 -o grub-dejavu-sans-12.pf2 "$SANS"
-$MKFONT -n "DejaVu Sans 13" -s 13 -o grub-dejavu-sans-13.pf2 "$SANS"
-$MKFONT -n "DejaVu Sans 16" -s 16 -o grub-dejavu-sans-16.pf2 "$SANS"
-$MKFONT -n "DejaVu Sans Bold 28" -s 28 -o grub-dejavu-sans-bold-28.pf2 "$SANSB"
+MONO=$(find /usr/share/fonts -name DejaVuSansMono.ttf | head -n 1)
+$MKFONT -n "DejaVu Sans" -s 12 -o grub-dejavu-sans-12.pf2 "$SANS"
+$MKFONT -n "DejaVu Sans" -s 13 -o grub-dejavu-sans-13.pf2 "$SANS"
+$MKFONT -n "DejaVu Sans" -s 16 -o grub-dejavu-sans-16.pf2 "$SANS"
+$MKFONT -n "DejaVu Sans" -s 28 -o grub-dejavu-sans-bold-28.pf2 "$SANSB"
+$MKFONT -n "DejaVu Sans Mono" -s 16 -o grub-dejavu-sans-mono-16.pf2 "$MONO"   # GRUB's command line
 
 %install
 # --- theme ---------------------------------------------------------------
@@ -152,6 +156,8 @@ fi
 
 %changelog
 * Wed Nov 25 2026 Envy <235594225+xzchick@users.noreply.github.com> - 0.1.0-3
+- GRUB menu: fonts named the way GRUB looks them up (it fell back to the bold
+  title font for everything), and a wider menu for long entry names.
 - The boot splash's disk-passphrase prompt is drawn from images: Plymouth 24's
   FreeType text plugin finds no font in the initramfs, so the text-only prompt
   was invisible and the splash just waited.
