@@ -20,7 +20,7 @@
   <a href="https://github.com/xzchick/envy-black-veil/releases/latest"><img src="https://img.shields.io/badge/download-v0.1.0_ISO-ff3db4?style=flat-square&labelColor=050713" alt="Download the v0.1.0 ISO" /></a>
 </p>
 
-> **Built and tested end to end, for PCs and Apple Silicon.** Every change builds the ISO for **x86_64** and **aarch64** and boots it in VMs ([ISO workflow](https://github.com/xzchick/envy-black-veil/actions/workflows/iso.yml)): UEFI through its own boot menu, **also with Secure Boot on**; the live KDE desktop logging in by itself; SELinux enforcing, the firewall closed, **nothing listening and nothing phoning home**. Then it **installs BLACK VEIL unattended** onto a blank disk with LUKS2 encryption, boots the installed disk on fresh firmware, types the passphrase into the ENVY splash, checks the installed system the same way and signs in on the ENVY login screen. Real-hardware testing comes next. It's a young `v0.1.0`.
+> **Built and tested end to end, for PCs and Apple Silicon.** Every change builds the ISO for **x86_64** and **aarch64** and boots it in VMs ([ISO workflow](https://github.com/xzchick/envy-black-veil/actions/workflows/iso.yml)): UEFI through its own boot menu, **also with Secure Boot on**; the live KDE desktop logging in by itself; SELinux enforcing, the firewall closed, **nothing listening and nothing phoning home**. Then it **installs BLACK VEIL unattended** onto a blank disk with LUKS2 encryption, boots the installed disk on fresh firmware, types the passphrase into the ENVY splash, checks the installed system the same way and signs in on the ENVY login screen. It also writes the ISO to a virtual **USB stick**, boots it through the stick's own menu with *keep changes*, and checks that what you change survives a reboot. Real hardware is next, and the **Hardware Report** in BLACK VEIL's menu makes it easy to [tell me how it went](https://github.com/xzchick/envy-black-veil/issues/new?template=hardware-report.yml). It's a young `v0.1.0`.
 
 <p align="center">
   <img src="assets/screenshots/live-desktop.png" width="92%" alt="The ENVY BLACK VEIL live desktop: the ENVY wallpaper with the wordmark over a neon nebula and grid, the Install ENVY BLACK VEIL icon and a dark Plasma panel" />
@@ -125,7 +125,12 @@ CYAN #35e8ff   LAVENDER #ac8cff   VIOLET #8547e8   GREEN #49e3a6
 
 ## Boot it from an external SSD, HDD or USB
 
-BLACK VEIL is meant to be portable — installed onto an external drive you carry and boot on almost any PC, leaving the host's internal disk untouched. The full walkthrough, including putting the bootloader on the **external** drive so it's self-contained, is in:
+BLACK VEIL is meant to be portable.
+- **Live from a USB stick**, fresh every boot.
+- **Live, keeping your changes** on the stick: the boot menu's *keep changes* entry turns the stick's free space into storage the first time you use it.
+- **Installed onto an external drive** you carry and boot on almost any PC, leaving the host's internal disk untouched.
+
+Secure Boot can stay on. The full walkthrough, including putting the boot loader on the **external** drive so it's self-contained, is in:
 
 ### → [docs/install-to-external-drive.md](docs/install-to-external-drive.md)
 
@@ -166,7 +171,8 @@ sudo ./build/build-iso.sh          # -> output/envy-black-veil-0.1.0-<arch>.iso
 | ENVY theme (Plasma, SDDM, Plymouth, GRUB, Konsole, wallpaper) | [`theme/`](theme) |
 | Identity RPMs (theme, boot menu and entry names, release file, privacy defaults) | [`packaging/envy-black-veil.spec`](packaging/envy-black-veil.spec) |
 | Privacy defaults (NetworkManager, Firefox, installer) | [`privacy/`](privacy) |
-| `envy-tools` on-demand app installer | [`tools/envy-tools`](tools/envy-tools) |
+| `envy-tools` on-demand app installer, and the hardware report | [`tools/`](tools) |
+| Keep changes on a USB stick (the live image's dracut module, boot menu entry) | [`live/`](live) · [`build/lorax-templates.py`](build/lorax-templates.py) |
 | ISO build script + Makefile | [`build/build-iso.sh`](build/build-iso.sh) |
 | CI: build in a VM, boot, install and check the ISO; package list and SBOM | [`ci/`](ci) · [ISO workflow](.github/workflows/iso.yml) |
 | Signed releases (ISOs that passed every check, signed checksums, SBOMs) | [Release workflow](.github/workflows/release.yml) |
@@ -183,8 +189,8 @@ sudo ./build/build-iso.sh          # -> output/envy-black-veil-0.1.0-<arch>.iso
 - [x] Secure Boot: AlmaLinux's signed boot chain, unchanged, boots the live ISO and installed systems with Secure Boot on (Microsoft's keys), with the kernel locked down.
 - [x] Nothing phones home by default, and each ISO under GitHub's 2 GiB file limit, with a package list and SBOM.
 - [x] A published, verified ISO release: [v0.1.0](https://github.com/xzchick/envy-black-veil/releases/tag/v0.1.0), with Sigstore-signed checksums, package lists and SBOMs. The [release workflow](.github/workflows/release.yml) publishes only ISOs that pass every check.
-- [ ] Acceptance on real hardware.
+- [x] Keep changes on a USB stick: the boot menu's *keep changes* entry turns a stick's free space into storage on first use. CI writes the ISO to a virtual stick, boots it twice and checks that changes survive. Both ISOs now boot from USB through their own EFI partition. (In builds from the ISO workflow now, and the next release.)
+- [ ] Acceptance on real hardware. Ready for it: the **Hardware Report** app (`envy-hardware-report`) and a [hardware report form](https://github.com/xzchick/envy-black-veil/issues/new?template=hardware-report.yml).
 - [ ] Signed packages and a hosted update repo, and with it BLACK VEIL's own release identity (os-release), which needs that repo to stay in step with AlmaLinux's updates.
-- [ ] Optional persistence tuning for USB-stick live use.
 
 <p align="center"><sub>MIT licensed. Created by <a href="https://github.com/xzchick">Envy (@xzchick)</a>. Built on AlmaLinux and KDE; the ENVY identity, theme and tooling are my own.</sub></p>

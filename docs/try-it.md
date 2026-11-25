@@ -89,10 +89,21 @@ On Windows Home, use VirtualBox or VMware Workstation (section 3).
 
 ## 4. On real hardware
 
-Write the ISO to a USB stick (≥ 4 GB) and boot from it — **Fedora Media Writer** (Windows, macOS, Linux), **balenaEtcher**, **Rufus** in *DD image* mode, or `dd` on Linux. The full walkthrough, including installing onto an external SSD you can carry between PCs, is in [install-to-external-drive.md](install-to-external-drive.md).
+Write the ISO to a USB stick of 4 GB or more, raw:
+- **Fedora Media Writer** on Windows, macOS or Linux;
+- **balenaEtcher**;
+- **Rufus** in *DD image* mode;
+- `dd`.
 
-- **Intel Macs** boot it from USB by holding **⌥ Option** at power-on. Macs with a T2 chip need *Startup Security Utility → Allow booting from external media* (and Secure Boot set to *No Security* if it won't start).
-- **Apple Silicon Macs** can't boot other operating systems from USB this way — use a VM (UTM is free and runs the aarch64 ISO at near-native speed).
+Then boot from it. Secure Boot can stay on.
+
+The walkthrough is in [install-to-external-drive.md](install-to-external-drive.md). It also covers keeping your changes on the stick, installing onto an external SSD you can carry between PCs, and what to do on PCs that refuse Microsoft's third-party certificate.
+
+- **Intel Macs** boot it from USB when you hold **⌥ Option** at power-on.
+  - Macs with a T2 chip need *Startup Security Utility → Allow booting from external media*.
+  - They also need Secure Boot set to *No Security*.
+- **Apple Silicon Macs** can't boot other operating systems from USB this way. Use a VM: UTM is free and runs the aarch64 ISO at near-native speed.
+- **Tell us how it went**: open **Hardware Report** from BLACK VEIL's menu and paste what it writes into a [hardware report](https://github.com/xzchick/envy-black-veil/issues/new?template=hardware-report.yml).
 
 ## What to expect
 
