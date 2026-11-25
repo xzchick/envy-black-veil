@@ -1,0 +1,120 @@
+name: Package repo
+
+# Build ENVY BLACK VEIL's packages, sign them and the repository's metadata with the
+# project's key (the RPM_SIGNING_KEY secret), and publish the repository on GitHub
+# Pages, https://xzchick.github.io/envy-black-veil/, where BLACK VEIL's dnf finds
+# updates. Then use it as a system would: a fresh AlmaLinux 10 adds the published
+# repository, installs from it with signature checks on, and checks every package's
+# signature against the key in this repository.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - packaging/**
+      - theme/**
+      - tools/**
+      - privacy/**
+      - live/**
+      - repo/**
+      - .github/workflows/repo.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# One publication at a time, and never cancel one halfway.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+env:
+  URL: https://xzchick.github.io/envy-black-veil
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container: almalinux:10
+    outputs:
+      repomd: ${{ steps.publish.outputs.repomd }}
+    steps:
+      - name: Install the build tools
+        run: |
+          dnf -y -q install epel-release dnf-plugins-core
+          dnf config-manager --set-enabled crb
+          dnf -y -q install git tar gzip findutils gawk sed rpm-build rpm-sign createrepo_c gnupg2 \
+            librsvg2-tools grub2-tools-extra dejavu-sans-fonts dejavu-sans-mono-fonts
+
+      - uses: actions/checkout@v4
+
+      - name: Build, sign and lay out the repository
+        id: publish
+        env:
+          RPM_SIGNING_KEY: ${{ secrets.RPM_SIGNING_KEY }}
+        run: |
+          ./repo/publish.sh site
+          echo "repomd=$(sha256sum site/el10/repodata/repomd.xml | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write      # publish to GitHub Pages
+      id-token: write   # prove the deployment comes from this workflow
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
+
+  verify:
+    needs: [build, deploy]
+    runs-on: ubuntu-latest
+    container: almalinux:10
+    steps:
+      - name: Install the tools
+        run: dnf -y -q install git gnupg2 dnf-plugins-core
+
+      - uses: actions/checkout@v4
+
+      - name: Wait for the site to serve this repository
+        env:
+          REPOMD: ${{ needs.build.outputs.repomd }}
+        run: |
+          for _ in $(seq 60); do
+            got=$(curl -fsSL "$URL/el10/repodata/repomd.xml" | sha256sum | cut -d' ' -f1) || got=
+            [ "$got" = "$REPOMD" ] && { echo "serving repomd.xml $got"; exit 0; }
+            sleep 15
+          done
+          echo "After 15 minutes the site still serves another repomd.xml ($got, not $REPOMD)."
+          exit 1
+
+      - name: Add the published repository and install from it, signatures checked
+        run: |
+          curl -fsSL -o /etc/yum.repos.d/envy-black-veil.repo "$URL/envy-black-veil.repo"
+          cat /etc/yum.repos.d/envy-black-veil.repo
+          # gpgcheck=1: dnf installs nothing that isn't signed with the repository's key
+          # (and imports that key from the site first, showing its fingerprint).
+          dnf -y install envy-black-veil-release envy-black-veil-live
+          rpm -q envy-black-veil-release envy-black-veil-live
+
+      - name: The key dnf imported is the one in this repository
+        run: |
+          want=$(gpg --batch --with-colons --show-keys repo/RPM-GPG-KEY-envy-black-veil | awk -F: '/^fpr/ {print $10; exit}')
+          id=$(printf '%s' "$want" | tail -c 8 | tr 'A-F' 'a-f')
+          echo "expected key $want"
+          rpm -q "gpg-pubkey-$id" --qf '%{NAME}-%{VERSION}-%{RELEASE}  %{SUMMARY}\n'
+
+      - name: Every package in the repository carries a good signature
+        run: |
+          dnf download --destdir /tmp/pkgs --repo envy-black-veil envy-black-veil-theme envy-black-veil-release envy-black-veil-live
+          rpm -K /tmp/pkgs/*.rpm | tee /tmp/checked.txt
+          ! grep -v ': digests signatures OK$' /tmp/checked.txt
+
+      - name: The repository's signed metadata checks out too (repo_gpgcheck)
+        run: dnf -y --repo envy-black-veil --setopt=envy-black-veil.repo_gpgcheck=1 makecache

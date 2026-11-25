@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ENVY BLACK VEIL packages</title>
+  <meta name="description" content="The signed package repository of ENVY BLACK VEIL, an AlmaLinux 10 + KDE Plasma 6 desktop OS.">
+  <style>
+    :root {
+      --bg: #050713; --panel: #0a0e22; --ink: #f2f4ff; --muted: #b8c4de;
+      --pink: #ff3db4; --cyan: #35e8ff; --lavender: #ac8cff; --line: #1d2348;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; background: var(--bg); color: var(--ink);
+      font: 16px/1.6 system-ui, -apple-system, "Segoe UI", "DejaVu Sans", sans-serif;
+    }
+    main { max-width: 760px; margin: 0 auto; padding: 48px 16px 64px; }
+    h1 { font-size: 2rem; line-height: 1.2; margin: 0 0 8px; letter-spacing: .02em; }
+    h1 span { color: var(--pink); }
+    h2 { font-size: 1.15rem; margin: 40px 0 8px; color: var(--cyan); }
+    p, li { color: var(--muted); }
+    a { color: var(--cyan); }
+    code, pre {
+      font-family: ui-monospace, "DejaVu Sans Mono", Menlo, Consolas, monospace; font-size: .92em;
+    }
+    pre {
+      background: var(--panel); border: 1px solid var(--line); border-left: 3px solid var(--pink);
+      border-radius: 8px; padding: 14px 16px; overflow-x: auto; color: var(--ink);
+    }
+    .fingerprint { color: var(--ink); word-spacing: .2em; overflow-wrap: anywhere; }
+    ul { padding-left: 20px; }
+    li code { color: var(--ink); overflow-wrap: anywhere; }
+    footer { margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--line); font-size: .9rem; color: var(--muted); }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>ENVY BLACK VEIL <span>packages</span></h1>
+    <p>The packages that turn AlmaLinux 10 + KDE Plasma 6 into
+      <a href="https://github.com/xzchick/envy-black-veil">ENVY BLACK VEIL</a>: its theme, its release
+      files and tools, and its live-media support. Each one is signed with the project's key. BLACK VEIL's
+      <code>dnf</code> gets its updates from here, along with AlmaLinux's own.</p>
+
+    <h2>Add it</h2>
+    <p>BLACK VEIL 0.2 and later have it already. On 0.1.0, which came out before this repository:</p>
+    <pre>sudo dnf config-manager --add-repo https://xzchick.github.io/envy-black-veil/envy-black-veil.repo
+sudo dnf upgrade</pre>
+    <p><code>dnf</code> shows the key's fingerprint before it imports it. Go on only if it matches the one below.</p>
+
+    <h2>The signing key</h2>
+    <p class="fingerprint"><code>@FINGERPRINT@</code></p>
+    <p>RSA 4096: <a href="RPM-GPG-KEY-envy-black-veil">RPM-GPG-KEY-envy-black-veil</a>. The repository's
+      metadata is signed too (<code>repomd.xml.asc</code>). For <code>dnf</code> to check it, add
+      <code>repo_gpgcheck=1</code> to the repository file.</p>
+
+    <h2>Packages</h2>
+    <ul>
+@PACKAGES@
+    </ul>
+
+    <footer>
+      Built and signed by the repository's
+      <a href="https://github.com/xzchick/envy-black-veil/actions/workflows/repo.yml">package-repo workflow</a>,
+      @UPDATED@. MIT licensed.
+    </footer>
+  </main>
+</body>
+</html>

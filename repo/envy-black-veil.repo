@@ -1,0 +1,10 @@
+# ENVY BLACK VEIL's own packages (theme, release, live media), signed with the
+# project's key and served from GitHub Pages. `sudo dnf upgrade` updates them
+# along with AlmaLinux.
+[envy-black-veil]
+name=ENVY BLACK VEIL
+baseurl=https://xzchick.github.io/envy-black-veil/el10/
+enabled=1
+gpgcheck=1
+gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-envy-black-veil
+countme=0

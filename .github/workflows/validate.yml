@@ -24,7 +24,7 @@ jobs:
         run: ksvalidator kickstart/envy-black-veil.ks
 
       - name: ShellCheck the scripts
-        run: shellcheck -e SC2059 tools/envy-tools tools/envy-hardware-report build/build-iso.sh ci/build-in-vm.sh try-black-veil.sh live/dracut/90envy-live-persist/*.sh
+        run: shellcheck -e SC2059 tools/envy-tools tools/envy-hardware-report build/build-iso.sh ci/build-in-vm.sh try-black-veil.sh live/dracut/90envy-live-persist/*.sh repo/publish.sh
 
       - name: Check the Python scripts compile
         run: python3 -m py_compile ci/boot-test.py ci/sbom.py build/lorax-templates.py
