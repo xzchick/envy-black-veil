@@ -232,6 +232,57 @@ def ppm_to_png(ppm: Path, png: Path) -> None:
 
 # ----- QEMU control ------------------------------------------------------------
 
+def png_rows(png: Path) -> tuple[int, int, int, list[bytearray]]:
+    """Decode an 8-bit RGB/RGBA PNG (QEMU's screendump) into rows of pixels."""
+    data = png.read_bytes()
+    pos, idat, width, height, ctype = 8, b"", 0, 0, 2
+    while pos < len(data):
+        length = struct.unpack(">I", data[pos:pos + 4])[0]
+        kind, body = data[pos + 4:pos + 8], data[pos + 8:pos + 8 + length]
+        pos += 12 + length
+        if kind == b"IHDR":
+            width, height, _, ctype = struct.unpack(">IIBB", body[:10])
+        elif kind == b"IDAT":
+            idat += body
+    raw, bpp = zlib.decompress(idat), 4 if ctype == 6 else 3
+    stride, rows, prev, i = width * bpp, [], bytearray(width * bpp), 0
+    for _ in range(height):
+        kind, line = raw[i], bytearray(raw[i + 1:i + 1 + stride])
+        i += 1 + stride
+        for x in range(stride):
+            a = line[x - bpp] if x >= bpp else 0
+            b, c = prev[x], (prev[x - bpp] if x >= bpp else 0)
+            if kind == 1:
+                line[x] = (line[x] + a) & 255
+            elif kind == 2:
+                line[x] = (line[x] + b) & 255
+            elif kind == 3:
+                line[x] = (line[x] + (a + b) // 2) & 255
+            elif kind == 4:
+                pa, pb, pc = abs(b - c), abs(a - c), abs(a + b - 2 * c)
+                line[x] = (line[x] + (a if pa <= pb and pa <= pc else b if pb <= pc else c)) & 255
+        rows.append(line)
+        prev = line
+    return width, height, bpp, rows
+
+
+def passphrase_box_visible(png: Path) -> bool:
+    """The ENVY splash's passphrase box: a long cyan-to-violet edge below the logo."""
+    try:
+        width, height, bpp, rows = png_rows(png)
+    except (OSError, ValueError, zlib.error, struct.error):
+        return False
+    for y in range(height // 2, height):
+        run = best = 0
+        for x in range(width):
+            r, g, b = rows[y][x * bpp:x * bpp + 3]
+            run = run + 1 if (b > 200 and g > 120 and r < 200) else 0
+            best = max(best, run)
+        if best >= 300:
+            return True
+    return False
+
+
 def connect_unix(path: Path, timeout=30.0) -> socket.socket:
     deadline = time.monotonic() + timeout
     while True:
@@ -722,7 +773,12 @@ def boot_installed(args, out: Path, res: Results, disk: Path, secure: bool = Fal
         for attempt in range(3):
             time.sleep(15 if attempt == 0 else 5)
             if not secure:
-                qmp.screenshot(out / ("installed-luks.png" if attempt == 0 else f"installed-luks-retry{attempt}.png"))
+                shot = out / ("installed-luks.png" if attempt == 0 else f"installed-luks-retry{attempt}.png")
+                qmp.screenshot(shot)
+                if attempt == 0:
+                    res.record(f"{pre}the ENVY splash shows the passphrase box", passphrase_box_visible(shot),
+                               "seen in installed-luks.png" if passphrase_box_visible(shot)
+                               else "no passphrase box on screen (see installed-luks.png)")
             con.buf = ""                                 # only signs that come after typing count
             qmp.type_text(LUKS_PASSPHRASE)
             if wait_for(con, r"login:\s*$|Reached target.*(Initrd Root|Switch Root|Multi-User|Graphical)", 150):

@@ -131,18 +131,19 @@ if (-not $dvd) { $dvd = Add-VMDvdDrive -VM $vm -Passthru }
 if ($Iso) {
     Set-VMDvdDrive -VMDvdDrive $dvd -Path $Iso
     Set-VMFirmware -VM $vm -FirstBootDevice (Get-VMDvdDrive -VM $vm | Select-Object -First 1)
-    Write-Step "Booting the live system from $(Split-Path -Leaf $Iso). It logs in by itself."
+    $booting = "the live system from $(Split-Path -Leaf $Iso). It logs in by itself."
 } else {
     Set-VMDvdDrive -VMDvdDrive $dvd -Path $null
     $disk = Get-VMHardDiskDrive -VM $vm | Select-Object -First 1
     if ($disk) { Set-VMFirmware -VM $vm -FirstBootDevice $disk }
-    Write-Step 'Booting the installed system.'
+    $booting = 'the installed system.'
 }
 
 if ($NoStart) {
     Write-Step "The VM '$Name' is ready. Start it from Hyper-V Manager, or run this again without -NoStart."
     exit 0
 }
+Write-Step "Booting $booting"
 Start-VM -VM $vm
 Start-Process -FilePath vmconnect.exe -ArgumentList 'localhost', "`"$Name`""
 Write-Step "The VM's window is opening. Close it any time; stop the VM from Hyper-V Manager or with: Stop-VM -Name '$Name'"

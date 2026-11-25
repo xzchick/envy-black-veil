@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="440" height="30" viewBox="0 0 440 30">
+  <!-- The prompt above the passphrase box, drawn at build time: the boot splash can't
+       count on fonts in the initramfs. A small lock, then the words. -->
+  <g fill="none" stroke="#35e8ff" stroke-width="2" stroke-linecap="round">
+    <path d="M9 12 v-3 a5 5 0 0 1 10 0 v3"/>
+  </g>
+  <rect x="6" y="12" width="16" height="12" rx="2.5" fill="#35e8ff"/>
+  <circle cx="14" cy="17.5" r="1.8" fill="#050713"/>
+  <text x="32" y="22" font-family="DejaVu Sans, Helvetica, Arial, sans-serif" font-size="15"
+        letter-spacing="2.2" fill="#f2f4ff">ENTER YOUR DISK PASSPHRASE</text>
+</svg>

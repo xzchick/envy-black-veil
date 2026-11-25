@@ -35,7 +35,10 @@ jobs:
             theme/wallpaper/envy-black-veil.svg \
             theme/grub/envy-black-veil/background.svg \
             theme/plymouth/envy-black-veil/logo.svg \
-            theme/plymouth/envy-black-veil/spark.svg
+            theme/plymouth/envy-black-veil/spark.svg \
+            theme/plymouth/envy-black-veil/prompt.svg \
+            theme/plymouth/envy-black-veil/entry.svg \
+            theme/plymouth/envy-black-veil/bullet.svg
 
       - name: Validate JSON config
         run: |

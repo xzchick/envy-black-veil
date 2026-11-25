@@ -92,8 +92,8 @@ Rectangle {
                     model: userModel
                     index: userModel.lastIndex
                     color: "#121735"; textColor: root.cInk
-                    borderColor: root.cLine; focusColor: root.cCyan
-                    arrowIcon: ""
+                    borderColor: root.cLine; focusColor: root.cCyan; hoverColor: "#2a3470"
+                    menuColor: "#0f1330"; arrowColor: "#121735"; arrowIcon: Qt.resolvedUrl("chevron.svg")
                 }
 
                 PasswordBox {
@@ -141,8 +141,8 @@ Rectangle {
                 model: sessionModel
                 index: sessionModel.lastIndex
                 color: "#121735"; textColor: root.cMuted
-                borderColor: root.cLine; focusColor: root.cCyan
-                arrowIcon: ""
+                borderColor: root.cLine; focusColor: root.cCyan; hoverColor: "#2a3470"
+                menuColor: "#0f1330"; arrowColor: "#121735"; arrowIcon: Qt.resolvedUrl("chevron.svg")
             }
             Button {
                 height: 30; width: 90; text: "Restart"

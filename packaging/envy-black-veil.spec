@@ -54,6 +54,10 @@ place, so dnf, repositories and updates keep working exactly as on AlmaLinux 10.
 # Render the SVG art to the PNGs the themes reference.
 rsvg-convert -w 820 -h 300 theme/plymouth/envy-black-veil/logo.svg  -o theme/plymouth/envy-black-veil/logo.png
 rsvg-convert -w 48  -h 48  theme/plymouth/envy-black-veil/spark.svg -o theme/plymouth/envy-black-veil/spark.png
+# The disk-passphrase prompt, as images (fonts can't be counted on in the initramfs)
+rsvg-convert -w 440 -h 30  theme/plymouth/envy-black-veil/prompt.svg -o theme/plymouth/envy-black-veil/prompt.png
+rsvg-convert -w 440 -h 52  theme/plymouth/envy-black-veil/entry.svg  -o theme/plymouth/envy-black-veil/entry.png
+rsvg-convert -w 14  -h 14  theme/plymouth/envy-black-veil/bullet.svg -o theme/plymouth/envy-black-veil/bullet.png
 rsvg-convert -w 1920 -h 1080 theme/grub/envy-black-veil/background.svg -o theme/grub/envy-black-veil/background.png
 rsvg-convert -w 2560 -h 1440 theme/wallpaper/envy-black-veil.svg -o wallpaper-2560x1440.png
 
@@ -148,6 +152,9 @@ fi
 
 %changelog
 * Wed Nov 25 2026 Envy <235594225+xzchick@users.noreply.github.com> - 0.1.0-3
+- The boot splash's disk-passphrase prompt is drawn from images: Plymouth 24's
+  FreeType text plugin finds no font in the initramfs, so the text-only prompt
+  was invisible and the splash just waited.
 - The ENVY GRUB menu on installed systems now comes from /etc/grub.d (Anaconda 40
   no longer runs /usr/share/anaconda/post-scripts), and boot entries are named
   ENVY BLACK VEIL by a kernel-install hook.
