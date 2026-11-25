@@ -22,11 +22,13 @@ validate-ks:
 
 validate-shell:
 	@echo "== shell =="
-	shellcheck -e SC2059 tools/envy-tools build/build-iso.sh ci/build-in-vm.sh try-black-veil.sh
+	shellcheck -e SC2059 tools/envy-tools tools/envy-hardware-report build/build-iso.sh ci/build-in-vm.sh \
+		try-black-veil.sh live/dracut/90envy-live-persist/*.sh
 
 validate-desktop:
-	@echo "== desktop entries (generated samples) =="
+	@echo "== desktop entries =="
 	@command -v desktop-file-validate >/dev/null && \
+		desktop-file-validate tools/desktop/envy-hardware-report.desktop && \
 		printf '[Desktop Entry]\nType=Application\nName=ENVY Vault\nExec=envy-vault\nTerminal=false\nCategories=Utility;Security;\n' \
 		> /tmp/envy.desktop && desktop-file-validate /tmp/envy.desktop && rm -f /tmp/envy.desktop || \
 		echo "desktop-file-validate not installed; skipping"

@@ -6,7 +6,7 @@
 
 Name:           envy-black-veil
 Version:        0.1.0
-Release:        3%{?dist}
+Release:        4%{?dist}
 Summary:        ENVY BLACK VEIL identity: theme and release identity
 License:        MIT
 URL:            https://github.com/xzchick/envy-black-veil
@@ -38,14 +38,32 @@ dark defaults in /etc/skel.
 
 # ---------------------------------------------------------------------------
 %package release
-Summary:        ENVY BLACK VEIL release file and the envy-tools installer
+Summary:        ENVY BLACK VEIL release file, envy-tools and the hardware report
 
 %description release
 Marks the system as ENVY BLACK VEIL (/etc/envy-black-veil-release), installs
-`envy-tools`, the on-demand installer for the ENVY application suite, and sets
+`envy-tools`, the on-demand installer for the ENVY application suite, and
+`envy-hardware-report` (the menu's Hardware Report), which describes this computer's
+hardware for a BLACK VEIL hardware report without anything that identifies you; and sets
 the privacy defaults: no NetworkManager connectivity check, no geolocation lookup
 in the installer, and Firefox without telemetry, studies or sponsored content. AlmaLinux's own release package stays in
 place, so dnf, repositories and updates keep working exactly as on AlmaLinux 10.
+
+# ---------------------------------------------------------------------------
+%package live
+Summary:        ENVY BLACK VEIL live media: keep changes on a USB stick
+Requires:       attr
+Requires:       dracut-live
+Requires:       e2fsprogs
+Requires:       parted
+
+%description live
+A dracut module for the live image's initramfs. The live boot menu's "keep changes
+on this USB stick" entry asks for persistence; on its first boot from a USB stick
+the module turns the stick's free space into an ext4 partition labelled
+ENVY-PERSIST, and dracut's dmsquash-live keeps the live system's changes there.
+It only ever adds a partition after a BLACK VEIL ISO written whole to a writable
+disk, and never touches a host-only (installed system's) initramfs.
 
 # ---------------------------------------------------------------------------
 %prep
@@ -119,10 +137,20 @@ install -d %{buildroot}%{_sysconfdir}
 echo "ENVY BLACK VEIL release %{version} (Nebula) — AlmaLinux 10 + KDE Plasma 6" \
     > %{buildroot}%{_sysconfdir}/envy-black-veil-release
 install -Dm755 tools/envy-tools   %{buildroot}%{_bindir}/envy-tools
+install -Dm755 tools/envy-hardware-report %{buildroot}%{_bindir}/envy-hardware-report
+install -Dm644 tools/desktop/envy-hardware-report.desktop \
+    %{buildroot}%{_datadir}/applications/envy-hardware-report.desktop
 install -Dm644 privacy/90-envy-privacy.conf \
     %{buildroot}%{_sysconfdir}/NetworkManager/conf.d/90-envy-privacy.conf
 install -Dm644 privacy/firefox-policies.json %{buildroot}%{_sysconfdir}/firefox/policies/policies.json
 install -Dm644 privacy/anaconda-90-envy-privacy.conf %{buildroot}%{_sysconfdir}/anaconda/conf.d/90-envy-privacy.conf
+
+# --- live ----------------------------------------------------------------
+install -d %{buildroot}%{_prefix}/lib/dracut/modules.d/90envy-live-persist
+install -m755 live/dracut/90envy-live-persist/module-setup.sh \
+    live/dracut/90envy-live-persist/envy-persist-genrules.sh \
+    live/dracut/90envy-live-persist/create-envy-persistence.sh \
+    %{buildroot}%{_prefix}/lib/dracut/modules.d/90envy-live-persist/
 
 %post theme
 if [ $1 -ge 1 ] && command -v plymouth-set-default-theme >/dev/null 2>&1; then
@@ -148,13 +176,27 @@ fi
 %license LICENSE
 %config(noreplace) %{_sysconfdir}/envy-black-veil-release
 %{_bindir}/envy-tools
+%{_bindir}/envy-hardware-report
+%{_datadir}/applications/envy-hardware-report.desktop
 %config(noreplace) %{_sysconfdir}/NetworkManager/conf.d/90-envy-privacy.conf
 %dir %{_sysconfdir}/firefox
 %dir %{_sysconfdir}/firefox/policies
 %config(noreplace) %{_sysconfdir}/firefox/policies/policies.json
 %config(noreplace) %{_sysconfdir}/anaconda/conf.d/90-envy-privacy.conf
 
+%files live
+%license LICENSE
+%{_prefix}/lib/dracut/modules.d/90envy-live-persist/
+
 %changelog
+* Wed Nov 25 2026 Envy <235594225+xzchick@users.noreply.github.com> - 0.1.0-4
+- New envy-black-veil-live: the live boot menu's "keep changes on this USB stick"
+  entry turns a stick's free space into persistent storage on its first boot,
+  labelled for SELinux so the live system runs enforcing on it.
+- envy-hardware-report and the menu's Hardware Report: this computer's hardware,
+  drivers and firmware problems as a Markdown report to share, without serial
+  numbers, addresses or names.
+
 * Wed Nov 25 2026 Envy <235594225+xzchick@users.noreply.github.com> - 0.1.0-3
 - GRUB menu: fonts named the way GRUB looks them up (it fell back to the bold
   title font for everything), and a wider menu for long entry names.

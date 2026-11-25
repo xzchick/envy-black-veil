@@ -106,9 +106,11 @@ python3-cryptography
 python3-pyqt6
 git
 
-# The ENVY identity: theme, defaults, release file and envy-tools
+# The ENVY identity: theme, defaults, release file, envy-tools and the hardware
+# report; and the live media's USB persistence (the boot menu's "keep changes" entry)
 envy-black-veil-theme
 envy-black-veil-release
+envy-black-veil-live
 
 # Firmware for common laptop audio
 alsa-sof-firmware

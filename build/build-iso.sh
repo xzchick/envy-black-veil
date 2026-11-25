@@ -6,7 +6,10 @@
 #   1. builds the ENVY identity RPMs (theme, release + envy-tools),
 #   2. publishes them as a local repo at /srv/envy-black-veil/repo, which the
 #      kickstart installs from,
-#   3. runs livemedia-creator --no-virt against kickstart/envy-black-veil.ks.
+#   3. runs livemedia-creator --no-virt against kickstart/envy-black-veil.ks, with
+#      lorax's live-ISO templates plus BLACK VEIL's changes (build/lorax-templates.py:
+#      the boot menu's "keep changes on this USB stick" entry, and the aarch64 ISO's
+#      USB layout) and the envy-live-persist module in the live initramfs.
 #
 # The OS is built on Linux. On macOS (or any Linux with KVM), ci/build-in-vm.sh runs
 # this script in a throwaway AlmaLinux 10 VM, which is how CI builds every change
@@ -84,7 +87,7 @@ say "Building the ENVY identity RPMs (theme, release + envy-tools)"
 rm -rf "$WORK"; mkdir -p "$WORK"/{SOURCES,SPECS,RPMS,BUILD,BUILDROOT,SRPMS}
 tar --transform "s,^,envy-black-veil-${VERSION}/," \
     -czf "$WORK/SOURCES/envy-black-veil-${VERSION}.tar.gz" -C "$HERE" \
-    theme tools privacy LICENSE
+    theme tools privacy live LICENSE
 rpmbuild --define "_topdir $WORK" -ba "$HERE/packaging/envy-black-veil.spec"
 
 say "Publishing the local package repo at $REPO_DIR"
@@ -113,6 +116,13 @@ rm -rf "$probe"
 compress=(--compression xz "--compress-arg=-b 1M")
 [ -z "$BCJ" ] || compress+=("--compress-arg=-Xbcj $BCJ")
 
+# lorax's live-ISO templates with BLACK VEIL's changes, and the live initramfs's
+# modules: lorax's own plus envy-live-persist (persistence on a USB stick).
+TEMPLATES=/var/tmp/envy-black-veil-lorax
+python3 "$HERE/build/lorax-templates.py" "$TEMPLATES" || die "couldn't prepare lorax's templates (see above)."
+mapfile -t dracut_args < <(python3 "$HERE/build/lorax-templates.py" --dracut-args)
+[ "${#dracut_args[@]}" -gt 0 ] || die "couldn't read lorax's initramfs arguments."
+
 rm -rf "$OUTDIR/result"            # livemedia-creator refuses an existing result dir
 mkdir -p "$OUTDIR/logs"
 say "Building the live ISO with livemedia-creator (about 20–50 minutes)"
@@ -128,6 +138,8 @@ livemedia-creator \
     --resultdir "$OUTDIR/result" \
     --logfile "$OUTDIR/logs/livemedia.log" \
     --nomacboot \
+    --lorax-templates "$TEMPLATES" \
+    "${dracut_args[@]/#/--dracut-arg=}" \
     "${compress[@]}" \
     "$@"
 

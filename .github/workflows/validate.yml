@@ -24,10 +24,10 @@ jobs:
         run: ksvalidator kickstart/envy-black-veil.ks
 
       - name: ShellCheck the scripts
-        run: shellcheck -e SC2059 tools/envy-tools build/build-iso.sh ci/build-in-vm.sh try-black-veil.sh
+        run: shellcheck -e SC2059 tools/envy-tools tools/envy-hardware-report build/build-iso.sh ci/build-in-vm.sh try-black-veil.sh live/dracut/90envy-live-persist/*.sh
 
-      - name: Check the boot-test script compiles
-        run: python3 -m py_compile ci/boot-test.py
+      - name: Check the Python scripts compile
+        run: python3 -m py_compile ci/boot-test.py ci/sbom.py build/lorax-templates.py
 
       - name: Check SVG art is well-formed
         run: |
@@ -45,8 +45,13 @@ jobs:
           python3 -c "import json; json.load(open('theme/wallpaper/metadata.json'))"
           python3 -c "import json; p = json.load(open('privacy/firefox-policies.json'))['policies']; assert p['DisableTelemetry'] is True"
 
-      - name: Lint desktop-entry generation
+      - name: Validate the hardware-report form
         run: |
+          python3 -c "import yaml; f = yaml.safe_load(open('.github/ISSUE_TEMPLATE/hardware-report.yml')); assert f['name'] and f['body']"
+
+      - name: Lint desktop entries
+        run: |
+          desktop-file-validate tools/desktop/envy-hardware-report.desktop
           printf '[Desktop Entry]\nType=Application\nName=ENVY Vault\nExec=envy-vault\nTerminal=false\nCategories=Utility;Security;\n' > sample.desktop
           desktop-file-validate sample.desktop
           rm -f sample.desktop
@@ -54,7 +59,7 @@ jobs:
       - name: Build the ENVY identity RPMs (catches spec mistakes in a minute)
         run: |
           mkdir -p .build/SOURCES
-          tar --transform "s,^,envy-black-veil-0.1.0/," -czf .build/SOURCES/envy-black-veil-0.1.0.tar.gz theme tools privacy LICENSE
+          tar --transform "s,^,envy-black-veil-0.1.0/," -czf .build/SOURCES/envy-black-veil-0.1.0.tar.gz theme tools privacy live LICENSE
           rpmbuild --nodeps --define "_topdir $PWD/.build" -bb packaging/envy-black-veil.spec
           for f in .build/RPMS/noarch/*.rpm; do echo "== $f"; rpm -qlp "$f"; done
 

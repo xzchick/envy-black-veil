@@ -16,6 +16,7 @@ on:
       - theme/**
       - tools/**
       - privacy/**
+      - live/**
       - build/**
       - ci/**
       - try-black-veil.sh

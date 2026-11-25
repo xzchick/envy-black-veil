@@ -17,6 +17,12 @@ drive were moved to another PC: it types the disk passphrase into the ENVY splas
 reaches the login screen, logs in over serial and checks the installed system,
 then signs in graphically for a desktop screenshot.
 
+The USB stick: the ISO written to a virtual 8 GB stick, booted through the stick's
+own boot menu with "keep changes on this USB stick" (a serial console added in
+GRUB's editor). The first boot makes the persistence partition; after a clean
+shutdown the stick's partition table must still be sound, and a second boot must
+find what the first one changed, with SELinux enforcing and no failed services.
+
 Secure Boot (x86_64, where firmware with Microsoft's keys enrolled is available,
 as on most PCs and Hyper-V): the ISO boots through its own boot menu with Secure
 Boot on, and (with --install) so does the installed disk; each is checked from
@@ -45,6 +51,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import uuid
 import zlib
 from pathlib import Path
 
@@ -356,8 +363,13 @@ class QMP:
                 print(f"  screenshot failed: {exc}")
                 return False
 
-    def type_text(self, text: str, enter=True) -> None:
-        """Type on the VM's keyboard (for the disk passphrase and the login screen)."""
+    def type_text(self, text: str, enter=True, between=None) -> None:
+        """Type on the VM's keyboard (for the disk passphrase and the login screen).
+
+        between() runs after each key: where the guest echoes keys to a serial console
+        (GRUB), pass the console's pump, or the echo fills the serial socket, the vCPU
+        blocks writing to it while holding QEMU's global lock, and QMP stops answering.
+        """
         for ch in text:
             if ch.isalpha() and ch.isupper():
                 keys = ["shift", ch.lower()]
@@ -366,7 +378,10 @@ class QMP:
             else:
                 keys = KEY_NAMES[ch]
             self.cmd("send-key", **{"keys": [{"type": "qcode", "data": k} for k in keys], "hold-time": 60})
-            time.sleep(0.08)
+            if between:
+                between()
+            else:
+                time.sleep(0.08)
         if enter:
             self.cmd("send-key", keys=[{"type": "qcode", "data": "ret"}])
 
@@ -425,6 +440,12 @@ class Serial:
                 self.buf += text
                 self.log.write(text)
                 self.log.flush()
+
+    def drain(self, seconds: float) -> None:
+        """Keep reading for this long (so the guest is never blocked writing to us)."""
+        end = time.monotonic() + seconds
+        while (left := end - time.monotonic()) > 0:
+            self.pump(left)
 
     def expect(self, pattern: str, timeout: float) -> re.Match | None:
         rx = re.compile(pattern, re.M)
@@ -573,13 +594,14 @@ def boot_secure_live(args, out: Path, res: Results) -> None:
         # From the boot menu, GRUB's own command line boots the live system with a
         # serial console added (GRUB allows this with Secure Boot on; the kernel it
         # loads must still pass shim's signature check).
-        qmp.type_text("c", enter=False)
+        pump = lambda: con.drain(0.08)                   # noqa: E731
+        qmp.type_text("c", enter=False, between=pump)
         time.sleep(2)
         qmp.type_text(f"linux {kernel} root=live:CDLABEL={volid} rd.live.image quiet rhgb console=tty0 "
-                      f"console={PLATFORM['tty']},115200n8 plymouth.ignore-serial-consoles")
-        qmp.type_text(f"initrd {initrd}")
+                      f"console={PLATFORM['tty']},115200n8 plymouth.ignore-serial-consoles", between=pump)
+        qmp.type_text(f"initrd {initrd}", between=pump)
         qmp.screenshot(out / "secureboot-grub-commands.png")
-        qmp.type_text("boot")
+        qmp.type_text("boot", between=pump)
         ok = con.login("liveuser", "", first_timeout=420)
         res.record("Secure Boot (live): boots to a login with Secure Boot on", ok,
                    "logged in over serial" if ok else "no login; see secureboot-*.png and serial-secureboot-live.log")
@@ -662,6 +684,12 @@ def live_checks(res: Results, qmp: QMP, args, out: Path) -> None:
               "print(repr(conf.timezone.geolocation_provider), conf.localization.use_geolocation)'",
               ok=lambda rc, o: o == "'' False")
     res.check("envy-tools works", "envy-tools list | head -6")
+    res.check("hardware report: runs, and leaves out MAC addresses",
+              "envy-hardware-report --stdout > /tmp/envy-hw.md; head -n 1 /tmp/envy-hw.md; "
+              "grep -c -i -E '([0-9a-f]{2}:){5}[0-9a-f]{2}' /tmp/envy-hw.md",
+              ok=lambda rc, o: o.splitlines()[:1] == ["# ENVY BLACK VEIL hardware report"] and o.splitlines()[-1] == "0")
+    rc, report = con.run("cat /tmp/envy-hw.md", 60)
+    (out / "hardware-report-live.md").write_text(report + "\n")
     res.check("translations are installed (German, for one)",
               "ls /usr/share/locale/de/LC_MESSAGES/ 2>/dev/null | wc -l", ok=lambda rc, o: o.isdigit() and int(o) >= 300)
     res.check("ENVY app runtime (Python, PyQt6, cryptography)",
@@ -887,6 +915,213 @@ def boot_installed(args, out: Path, res: Results, disk: Path, secure: bool = Fal
         stop_qemu(proc, qmp)
 
 
+# ----- the ISO as a USB stick: boot menus, layout, and keeping changes ----------
+
+PERSIST_LABEL = "ENVY-PERSIST"
+ESP_TYPE = uuid.UUID("c12a7328-f81f-11d2-ba4b-00a0c93ec93b")
+
+
+def gpt_partitions(img: Path) -> tuple[list[tuple[str, uuid.UUID, int, int]], list[str]]:
+    """A disk image's GPT partitions as (name, type, first sector, last sector), and what
+    firmware would object to: bad checksums, or a backup header that isn't at the end."""
+    with open(img, "rb") as f:
+        f.seek(512)
+        hdr = f.read(512)
+        if hdr[:8] != b"EFI PART":
+            return [], ["no GPT"]
+        hsize, hcrc = struct.unpack_from("<II", hdr, 12)
+        backup_lba = struct.unpack_from("<Q", hdr, 32)[0]
+        entries_lba, count, esize, ecrc = struct.unpack_from("<QIII", hdr, 72)
+        problems = []
+        blank = bytearray(hdr[:hsize])
+        blank[16:20] = b"\0\0\0\0"
+        if zlib.crc32(blank) != hcrc:
+            problems.append("bad header checksum")
+        f.seek(entries_lba * 512)
+        table = f.read(count * esize)
+        if zlib.crc32(table) != ecrc:
+            problems.append("bad partition table checksum")
+        f.seek(backup_lba * 512)
+        if f.read(8) != b"EFI PART":
+            problems.append(f"no backup header at sector {backup_lba}")
+        last = img.stat().st_size // 512 - 1
+        if backup_lba != last:
+            problems.append(f"backup header at sector {backup_lba}, not at the end ({last})")
+    parts = []
+    for i in range(count):
+        e = table[i * esize:(i + 1) * esize]
+        if e[:16] == bytes(16):
+            continue
+        first, end = struct.unpack_from("<QQ", e, 32)
+        parts.append((e[56:128].decode("utf-16-le").rstrip("\0"), uuid.UUID(bytes_le=e[:16]), first, end))
+    return parts, problems
+
+
+def iso_file(iso: Path, path: str, dest: Path) -> str:
+    dest.unlink(missing_ok=True)
+    subprocess.run(["xorriso", "-osirrox", "on", "-indev", str(iso), "-extract", path, str(dest)],
+                   capture_output=True)
+    return dest.read_text(errors="replace") if dest.exists() else ""
+
+
+def menu_entries(cfg: str) -> tuple[list[tuple[str, str]], int]:
+    """A GRUB menu's top-level entries as (title, kernel arguments) and its default index."""
+    entries = []
+    for m in re.finditer(r"^(menuentry|submenu) '([^']*)'[^\n]*\{\n(.*?)^\}", cfg, re.M | re.S):
+        kernel = re.search(r"^\s*linux(?:efi)?\s+\S+\s+(.*)$", m.group(3), re.M)
+        entries.append((m.group(2), kernel.group(1).strip() if kernel and m.group(1) == "menuentry" else ""))
+    default = re.search(r'^set default="(\d+)"', cfg, re.M)
+    return entries, int(default.group(1)) if default else 0
+
+
+def iso_layout_checks(args, out: Path, res: Results) -> None:
+    """What a USB stick written from this ISO starts with: its partitions and boot menus."""
+    print("== The ISO as a USB stick: partition layout and boot menus", flush=True)
+    parts, problems = gpt_partitions(args.iso)
+    esp = [p for p in parts if p[1] == ESP_TYPE]
+    res.record("USB layout: a GPT with an EFI system partition (boots from a USB stick on UEFI PCs)",
+               bool(esp) and not problems,
+               "; ".join(f"{n or '?'} {a}-{b}" for n, _, a, b in parts) + ("; " + ", ".join(problems) if problems else ""))
+    menus = [("UEFI", "/EFI/BOOT/grub.cfg")] + ([("BIOS", "/boot/grub2/grub.cfg")]
+                                              if PLATFORM is PLATFORMS["x86_64"] else [])
+    for kind, path in menus:
+        entries, default = menu_entries(iso_file(args.iso, path, out / f"iso-{kind.lower()}-grub.cfg"))
+        keep = [(t, a) for t, a in entries if "keep changes" in t]
+        res.record(f"{kind} boot menu offers 'keep changes on this USB stick'",
+                   bool(keep) and f"rd.live.overlay=LABEL={PERSIST_LABEL}" in keep[0][1],
+                   f"{keep[0][0]}: {keep[0][1]}" if keep else " · ".join(t for t, _ in entries))
+        res.record(f"{kind} boot menu's default is still 'Test this media & start'",
+                   default < len(entries) and entries[default][0].startswith("Test this media"),
+                   entries[default][0] if default < len(entries) else f"default {default} of {len(entries)}")
+
+
+def boot_stick(args, out: Path, res: Results, stick: Path, name: str, title: str) -> tuple[subprocess.Popen, QMP] | None:
+    """Boot the stick on UEFI firmware the way a person would: its own boot menu, the
+    entry called title, with a serial console added in GRUB's editor. Returns the VM
+    once logged in as the live user, or None."""
+    serial_path = SOCKETS / f"serial-{name}.sock"
+    serial_path.unlink(missing_ok=True)
+    proc, qmp = start_qemu(args, out, name, ovmf(out / f"OVMF_VARS_{name}.fd") + [
+        "-device", "qemu-xhci,id=stickbus",
+        "-drive", f"if=none,id=stick,format=raw,file={stick},cache=writeback",
+        "-device", "usb-storage,bus=stickbus.0,drive=stick,removable=on,bootindex=0",
+        "-chardev", f"socket,id=ser{name},path={serial_path},server=on,wait=off", "-serial", f"chardev:ser{name}"],
+        cdrom=False)
+    con = Serial(serial_path, out / f"serial-{name}.log")
+    res.console = con
+    entries, default = menu_entries((out / "iso-uefi-grub.cfg").read_text())
+    titles = [t for t, _ in entries]
+    if not con.expect(r"keep changes", 120 * args.slow):
+        qmp.screenshot(out / f"{name}-no-menu.png")
+        res.record(f"USB stick ({name}): its own boot menu comes up", False, "no GRUB menu on the serial console")
+        stop_qemu(proc, qmp)
+        return None
+    time.sleep(2)
+    qmp.screenshot(out / f"{name}-menu.png")
+    target = titles.index(title)
+    pump = lambda: con.drain(0.08)                       # noqa: E731  (see QMP.type_text)
+    for _ in range(abs(target - default)):
+        qmp.cmd("send-key", keys=[{"type": "qcode", "data": "down" if target > default else "up"}])
+        con.drain(0.3)
+    # GRUB's editor: the entry's first line is its kernel line; add a serial console to
+    # it and boot (ctrl-x), as anyone can at this menu.
+    qmp.type_text("e", enter=False, between=pump)
+    con.drain(2)
+    qmp.cmd("send-key", keys=[{"type": "qcode", "data": "end"}])
+    con.drain(0.3)
+    qmp.type_text(f" console=tty0 console={PLATFORM['tty']},115200n8 plymouth.ignore-serial-consoles",
+                  enter=False, between=pump)
+    qmp.screenshot(out / f"{name}-edit.png")
+    qmp.cmd("send-key", keys=[{"type": "qcode", "data": "ctrl"}, {"type": "qcode", "data": "x"}])
+    if not con.login("liveuser", "", first_timeout=600 * args.slow):
+        qmp.screenshot(out / f"{name}-no-login.png")
+        res.record(f"USB stick ({name}): boots to a login", False, "no login on the serial console")
+        stop_qemu(proc, qmp)
+        return None
+    return proc, qmp
+
+
+def stick_health(res: Results, when: str) -> None:
+    """The kept system is a healthy one: SELinux enforcing with / labelled as it should be."""
+    res.check(f"USB stick ({when}): SELinux enforcing, and / keeps its label on the stick",
+              "getenforce; ls -Zd / | cut -d' ' -f1",
+              ok=lambda rc, o: o.split() == ["Enforcing", "system_u:object_r:root_t:s0"])
+    res.check(f"USB stick ({when}): no failed services", "systemctl --failed --no-legend --plain",
+              ok=lambda rc, o: rc == 0 and o == "")
+    res.check(f"USB stick ({when}): SELinux denials", f"{SUDO} journalctl -b -o cat | grep -c 'avc:  denied' || true",
+              required=False)
+
+
+def power_off(con: Serial, proc: subprocess.Popen, qmp: QMP) -> bool:
+    con.send(f"{SUDO} systemctl poweroff\n")
+    try:
+        proc.wait(timeout=240 * SLOW)
+        return True
+    except subprocess.TimeoutExpired:
+        stop_qemu(proc, qmp)
+        return False
+
+
+def usb_persistence(args, out: Path, res: Results) -> None:
+    """The ISO written to an 8 GB USB stick; boot its "keep changes" entry twice."""
+    print("== USB stick: 'keep changes' makes persistent storage on the stick, and changes survive a reboot", flush=True)
+    entries, _ = menu_entries((out / "iso-uefi-grub.cfg").read_text())
+    keep = next((t for t, _ in entries if "keep changes" in t), None)
+    if keep is None:
+        res.record("USB stick: the 'keep changes' entry", False, "not on the boot menu")
+        return
+    stick = out / "usb-stick.img"
+    shutil.copyfile(args.iso, stick)
+    os.truncate(stick, 8 * 1024 ** 3)                    # an 8 GB stick, the rest of it free
+    token = base64.b32encode(os.urandom(5)).decode().lower()
+    try:
+        vm = boot_stick(args, out, res, stick, "stick1", keep)
+        if vm is None:
+            return
+        proc, qmp = vm
+        con = res.console
+        res.record("USB stick: boots through its own menu to the live system", True, "logged in over serial")
+        res.check("USB stick: first 'keep changes' boot made the persistence partition",
+                  f"lsblk -rno NAME,LABEL | grep -w {PERSIST_LABEL}")
+        res.check("USB stick: the live system keeps its changes there",
+                  "lsblk -no LABEL \"$(findmnt -no SOURCE /run/initramfs/overlayfs)\"",
+                  ok=lambda rc, o: o == PERSIST_LABEL)
+        res.check("USB stick: the root filesystem is an overlay onto the stick",
+                  "findmnt -no FSTYPE / ; readlink /run/overlayfs", ok=lambda rc, o: o.startswith("overlay")
+                  and "/run/initramfs/overlayfs/LiveOS/overlay-" in o)
+        res.check("USB stick: the desktop starts", "for i in $(seq 60); do pgrep -u liveuser -x plasmashell >/dev/null && break; sleep 5; done; pgrep -u liveuser -a plasmashell",
+                  timeout=330)
+        stick_health(res, "first boot")
+        con.run(f"echo {token} > ~/envy-persist-test; {SUDO} sh -c 'echo {token} > /etc/envy-persist-test'; sync", 60)
+        res.record("USB stick: shuts down cleanly", power_off(con, proc, qmp), "systemctl poweroff")
+        parts, problems = gpt_partitions(stick)
+        persist = [p for p in parts if p[0] == PERSIST_LABEL]
+        res.record("USB stick: its partition table is sound afterwards (checksums, backup at the end)",
+                   bool(persist) and not problems,
+                   "; ".join(f"{n or '?'} {a}-{b}" for n, _, a, b in parts) + ("; " + ", ".join(problems) if problems else ""))
+
+        vm = boot_stick(args, out, res, stick, "stick2", keep)
+        if vm is None:
+            return
+        proc, qmp = vm
+        res.check("USB stick: changes survive a reboot (a file in the live user's home and one in /etc)",
+                  "cat ~/envy-persist-test /etc/envy-persist-test", ok=lambda rc, o: o.split() == [token, token])
+        res.check("USB stick: still one persistence partition (made once, then reused)",
+                  f"lsblk -rno LABEL | grep -cx {PERSIST_LABEL}", ok=lambda rc, o: o == "1")
+        res.check("USB stick: the desktop starts again on the kept system",
+                  "for i in $(seq 60); do pgrep -u liveuser -x plasmashell >/dev/null && break; sleep 5; done; pgrep -u liveuser -a plasmashell", timeout=330)
+        stick_health(res, "second boot")
+        res.check("USB stick: the persistence partition was unmounted cleanly last time",
+                  f"{SUDO} journalctl -k -b -o cat | grep -i -E 'EXT4-fs.*(recovery|orphan)' || echo clean",
+                  ok=lambda rc, o: o.endswith("clean"), required=False)
+        time.sleep(args.settle * args.slow)              # let the panel draw before the screenshot
+        qmp.screenshot(out / "stick-desktop.png")
+        power_off(res.console, proc, qmp)
+    finally:
+        if not args.keep_disk:
+            stick.unlink(missing_ok=True)
+
+
 # ----- main --------------------------------------------------------------------
 
 def main() -> int:
@@ -905,6 +1140,7 @@ def main() -> int:
     ap.add_argument("--keep-disk", action="store_true", help="keep the installed disk (installed-disk.qcow2) afterwards")
     ap.add_argument("--accel", choices=["auto", "kvm", "hvf", "tcg"], default="auto",
                     help="force an accelerator (tcg reproduces CI's emulated ARM runs)")
+    ap.add_argument("--skip-usb", action="store_true", help="skip the USB stick persistence boots")
     ap.add_argument("--installed-disk", type=Path,
                     help="skip the live boots and the install; boot and check this already-installed disk")
     ap.add_argument("--arch", choices=sorted(PLATFORMS),
@@ -946,6 +1182,13 @@ def main() -> int:
             boot_installed(args, out, res, disk, secure=True)
         if disk and disk.exists() and not args.keep_disk:
             disk.unlink()                               # 10+ GB; not worth keeping
+        iso_layout_checks(args, out, res)
+        if args.skip_usb:
+            pass
+        elif ACCEL == "tcg":
+            print("== USB stick: skipped when emulated (two more full boots; CI runs it with KVM)", flush=True)
+        else:
+            usb_persistence(args, out, res)
 
     results = res.items
     failed = [r for r in results if r["required"] and not r["ok"]]

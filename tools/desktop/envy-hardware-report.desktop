@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Hardware Report
+GenericName=BLACK VEIL hardware report
+Comment=What BLACK VEIL found on this computer, ready to share in a hardware report
+Exec=envy-hardware-report --open
+Icon=computer
+Terminal=false
+Categories=System;
+Keywords=hardware;report;drivers;firmware;compatibility;

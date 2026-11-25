@@ -1,0 +1,239 @@
+#!/usr/bin/env bash
+# envy-hardware-report — what ENVY BLACK VEIL found on this computer, as a Markdown
+# report to share in a hardware report:
+#   https://github.com/xzchick/envy-black-veil/issues/new?template=hardware-report.yml
+#
+#   envy-hardware-report            write ~/envy-hardware-report-<date>.md and say where
+#   envy-hardware-report --open     the same, then open it (the menu's Hardware Report)
+#   envy-hardware-report --stdout   print the report instead
+#
+# It only reads, needs no network and no root, and leaves out what identifies you or
+# this particular machine: serial numbers, MAC and IP addresses, UUIDs, and your
+# user and host names. Read the report before you share it all the same.
+
+set -uo pipefail
+export LC_ALL=C
+
+mode="file"
+case "${1:-}" in
+    "") ;;
+    --open) mode=open ;;
+    --stdout) mode=stdout ;;
+    -h | --help) sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    *) echo "envy-hardware-report: unknown option '$1' (see --help)" >&2; exit 2 ;;
+esac
+
+have() { command -v "$1" > /dev/null 2>&1; }
+dmi() { tr -d '\n' < "/sys/class/dmi/id/$1" 2> /dev/null; }
+user=$(id -un)
+host=$(hostname 2> /dev/null || cat /etc/hostname 2> /dev/null || echo localhost)
+
+# Mask what identifies the person or the machine (MAC/IP addresses, UUIDs, serial
+# numbers, user and host names) in anything taken from logs or tools.
+scrub() {
+    local args=(-E
+        -e '/[Ss]erial/d'
+        -e 's/([0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}/xx:xx:xx:xx:xx:xx/g'
+        -e 's/\b([0-9]{1,3}\.){3}[0-9]{1,3}\b/x.x.x.x/g'
+        -e 's/\b([0-9A-Fa-f]{1,4}:){5,7}[0-9A-Fa-f]{1,4}\b/xxxx:…:xxxx/g'
+        -e 's/\b[0-9A-Fa-f]{1,4}::[0-9A-Fa-f:]*/xxxx::…/g'
+        -e 's/[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}/<uuid>/g'
+        -e 's#/home/[^/ ]+#/home/<user>#g')
+    [ "${#user}" -ge 3 ] && [ "$user" != liveuser ] && args+=(-e "s/\\b${user}\\b/<user>/g")
+    [ "${#host}" -ge 3 ] && [ "$host" != black-veil ] && [ "$host" != localhost ] \
+        && args+=(-e "s/\\b${host//./\\.}\\b/<host>/g")
+    sed "${args[@]}"
+}
+
+# Kernel messages for this boot (members of wheel can read them; dmesg otherwise).
+kernel_log() {
+    journalctl -k -b -o cat --no-pager 2> /dev/null && return
+    dmesg 2> /dev/null
+}
+
+block() {             # a fenced block of a command's (scrubbed) output, or a note
+    local title=$1; shift
+    printf '\n### %s\n\n```\n' "$title"
+    local out
+    out=$("$@" 2>&1 | scrub)
+    if [ -n "$out" ]; then printf '%s\n' "$out"; else echo "(nothing)"; fi
+    printf '```\n'
+}
+
+report() {
+    local now version base kernel boot sb="" live persist="" cpu cores threads mem chassis
+    now=$(date -u '+%Y-%m-%d %H:%M UTC')
+    version=$(cat /etc/envy-black-veil-release 2> /dev/null || echo "not ENVY BLACK VEIL")
+    # shellcheck disable=SC1091
+    base=$( (. /etc/os-release 2> /dev/null && echo "${PRETTY_NAME:-unknown}") || echo unknown)
+    kernel=$(uname -r)
+    if [ -d /sys/firmware/efi ]; then
+        boot=UEFI
+        sb=$(od -An -tu1 /sys/firmware/efi/efivars/SecureBoot-8be4df61-93ca-11d2-aa0d-00e098032b8c 2> /dev/null | awk '{print $NF}')
+        case "$sb" in 1) boot="UEFI, Secure Boot on" ;; 0) boot="UEFI, Secure Boot off" ;; esac
+    else
+        boot="legacy BIOS"
+    fi
+    if grep -qw rd.live.image /proc/cmdline; then
+        live="live session"
+        if mountpoint -q /run/initramfs/overlayfs 2> /dev/null || [ -L /run/overlayfs ]; then
+            persist=$(findmnt -n -o SOURCE /run/initramfs/overlayfs 2> /dev/null)
+            [ -n "$persist" ] && live="live session, keeping changes on the USB stick"
+        fi
+    else
+        live="installed"
+    fi
+    cpu=$(awk -F': ' '/^model name/ {print $2; exit}' /proc/cpuinfo)
+    # ARM CPUs have no "model name" in /proc/cpuinfo: lscpu's vendor and model instead.
+    [ -n "$cpu" ] || cpu=$(lscpu 2> /dev/null | awk -F': +' '/^Vendor ID/ {v = $2} /^Model name/ && $2 != "-" {m = $2} END {print v (m == "" ? "" : " " m)}')
+    cores=$(lscpu -p=core 2> /dev/null | grep -v '^#' | sort -u | wc -l)
+    threads=$(nproc)
+    mem=$(awk '/^MemTotal/ {printf "%.0f GiB", $2 / 1048576}' /proc/meminfo)
+    chassis=$(dmi chassis_type)
+    case "$chassis" in
+        3 | 4 | 5 | 6 | 7 | 15 | 16 | 35) chassis=desktop ;;
+        8 | 9 | 10 | 11 | 14 | 30 | 31 | 32) chassis=laptop ;;
+        13) chassis=all-in-one ;;
+        1 | 2 | "") chassis="" ;;
+        *) chassis="type $chassis" ;;
+    esac
+
+    local computer
+    computer="$(dmi sys_vendor) $(dmi product_name)"
+    [ -n "$(dmi product_version)" ] && computer+=" ($(dmi product_version))"
+    [ -n "$chassis" ] && computer+=", $chassis"
+
+    # Graphics: the GPUs and their drivers, then what the desktop renders with.
+    local gpus renderer vk
+    gpus=$(lspci -nnk 2> /dev/null | awk '
+        /^[0-9a-f]/ { if (dev != "") print dev " [" (drv == "" ? "no driver" : drv) "]"; dev = ""; drv = "" }
+        /^[0-9a-f].*(VGA compatible|3D controller|Display controller)/ { sub(/^[^ ]+ [^:]+: /, ""); dev = $0 }
+        /Kernel driver in use:/ { drv = $NF }
+        END { if (dev != "") print dev " [" (drv == "" ? "no driver" : drv) "]" }')
+    renderer=$(have glxinfo && glxinfo -B 2> /dev/null | awk -F': ' '/OpenGL renderer string/ {print $2; exit}')
+    vk=$(have vulkaninfo && vulkaninfo --summary 2> /dev/null | awk -F'= ' '/deviceName/ {printf "%s%s", sep, $2; sep = "; "}')
+
+    # Network: every interface but loopback, with its kind, driver and state.
+    local nets
+    nets=$(for i in /sys/class/net/*; do
+        n=${i##*/}
+        [ "$n" = lo ] && continue
+        [ -e "$i/device" ] || continue
+        kind=Ethernet
+        [ -d "$i/wireless" ] || [ -d "$i/phy80211" ] && kind=Wi-Fi
+        drv=$(basename "$(readlink -f "$i/device/driver" 2> /dev/null)" 2> /dev/null)
+        state=$(cat "$i/operstate" 2> /dev/null)
+        echo "$kind $n (${drv:-no driver}, $state)"
+    done | paste -sd ';' - | sed 's/;/; /g')
+
+    local bt=""
+    for h in /sys/class/bluetooth/hci*; do
+        [ -e "$h" ] || continue
+        bt+="${h##*/} ($(basename "$(readlink -f "$h/device/driver" 2> /dev/null)" 2> /dev/null)) "
+    done
+    [ -n "$bt" ] || bt="none found"
+    local rf
+    rf=$(rfkill -n -o TYPE,SOFT,HARD 2> /dev/null | awk '$2 == "blocked" || $3 == "blocked" {printf "%s %s ", $1, ($3 == "blocked" ? "hard-blocked" : "blocked")}')
+    [ -n "$rf" ] && bt+=" · radio blocks: $rf"
+
+    local sound
+    sound=$(sed -n 's/^ *[0-9]* \[[^]]*\]: \(.*\)$/\1/p' /proc/asound/cards 2> /dev/null | paste -sd ';' - | sed 's/;/; /g')
+    [ -n "$sound" ] || sound="no sound card found"
+    local sinks=""
+    have pactl && sinks=$(pactl list short sinks 2> /dev/null | awk '{print $2}' | paste -sd ',' - | sed 's/,/, /g')
+
+    local battery="none (or not reported)"
+    for b in /sys/class/power_supply/BAT*; do
+        [ -e "$b" ] || continue
+        full=$(cat "$b/energy_full" 2> /dev/null || cat "$b/charge_full" 2> /dev/null)
+        design=$(cat "$b/energy_full_design" 2> /dev/null || cat "$b/charge_full_design" 2> /dev/null)
+        health=""
+        [ -n "$full" ] && [ -n "$design" ] && [ "$design" -gt 0 ] && health=", holds $((full * 100 / design)) % of its design capacity"
+        battery="${b##*/}: $(cat "$b/status" 2> /dev/null), $(cat "$b/capacity" 2> /dev/null) %$health"
+    done
+    local sleep
+    sleep=$(cat /sys/power/mem_sleep 2> /dev/null || echo "not reported")
+
+    local session="${XDG_SESSION_TYPE:-no graphical session}"
+    [ -n "${XDG_CURRENT_DESKTOP:-}" ] && session+=", ${XDG_CURRENT_DESKTOP}"
+    have plasmashell && session+=" ($(plasmashell --version 2> /dev/null))"
+
+    # Automatic checks: things that commonly go wrong on real hardware.
+    local klog nodriver fw failed
+    klog=$(kernel_log)
+    nodriver=$(lspci -nnk 2> /dev/null | awk '
+        /^[0-9a-f]/ { if (dev != "" && drv == "") print dev; dev = $0; drv = "" }
+        /Kernel driver in use:/ { drv = $NF }
+        END { if (dev != "" && drv == "") print dev }' \
+        | grep -v -E 'Host bridge|PCI bridge|ISA bridge|SMBus|Signal processing|RAM memory|Non-Essential Instrumentation|System peripheral|Communication controller|Serial bus controller|Memory controller|Encryption controller|Performance counters' | scrub)
+    fw=$(printf '%s\n' "$klog" | grep -i -E 'firmware.*(fail|not found|missing|error)|direct firmware load|failed to load .*\.(bin|ucode|fw|sbin|pnvm)' | sort -u | head -n 40 | scrub)
+    failed=$(systemctl --failed --no-legend --plain 2> /dev/null | awk '{print $1}' | paste -sd ' ' -)
+
+    cat << EOF
+# ENVY BLACK VEIL hardware report
+
+Made by \`envy-hardware-report\` on $now. It leaves out serial numbers, MAC and IP
+addresses, UUIDs and user and host names; read it before you share it.
+
+| | |
+| --- | --- |
+| Computer | $(printf '%s' "$computer" | scrub) |
+| BLACK VEIL | $version ($live) |
+| Base system | $base, kernel $kernel |
+| Boot | $boot |
+| CPU | $cpu (${cores:-?} cores, $threads threads) |
+| Memory | $mem |
+| Graphics | $(printf '%s' "${gpus:-none found}" | paste -sd ';' - | sed 's/;/; /g') |
+| Renderer | ${renderer:-not reported (run it from the desktop)}${vk:+ · Vulkan: $vk} |
+| Session | $session |
+| Network | ${nets:-no network hardware found} |
+| Bluetooth | $bt |
+| Sound | $sound${sinks:+ · outputs: $sinks} |
+| Battery | $battery |
+| Sleep modes | $sleep |
+
+## Automatic checks
+
+EOF
+    if [ -z "$nodriver" ]; then echo "- ✅ Every device that needs a driver has one."
+    else printf -- '- ⚠️ Devices without a driver:\n%s\n' "$(printf '%s\n' "$nodriver" | sed 's/^/  - /')"; fi
+    # shellcheck disable=SC2016  # the backticks are Markdown
+    if [ -z "$fw" ]; then echo "- ✅ No firmware failed to load."
+    else printf -- '- ⚠️ Firmware problems in the kernel log:\n%s\n' "$(printf '%s\n' "$fw" | sed 's/^/  - `/; s/$/`/')"; fi
+    if [ -z "$failed" ]; then echo "- ✅ No failed services."
+    else echo "- ⚠️ Failed services: $failed"; fi
+    if [ -z "$klog" ]; then echo "- ℹ️ The kernel log wasn't readable as $user (run as a member of wheel for more)."; fi
+
+    printf '\n## Details\n'
+    block "PCI devices and their drivers (lspci -nnk)" lspci -nnk
+    block "USB devices (lsusb)" lsusb
+    block "Disks (lsblk)" lsblk -d -e 7 -o NAME,SIZE,TYPE,TRAN,ROTA,MODEL
+    block "Input devices" input_devices
+    block "Cameras" cameras
+    block "Kernel messages about drivers, firmware and hardware errors" kernel_problems
+    block "Errors logged this boot, by program (journalctl -b -p err)" errors_by_program
+}
+
+input_devices() { sed -n 's/^N: Name="\(.*\)"$/\1/p' /proc/bus/input/devices | sort -u; }
+cameras() { cat /sys/class/video4linux/*/name 2> /dev/null | sort -u; }
+kernel_problems() {
+    printf '%s\n' "$klog" \
+        | grep -i -E 'firmware.*(fail|error|missing|not found|not available)|direct firmware load|fail|[^a-z]error|timed out|timeout|unsupported|not supported|ACPI (Error|BIOS Error)|\bhang\b|hung task|denied' \
+        | grep -v -i -E 'audit:|secure ?boot|unmet condition|GPT:|no fail' | head -n 80
+}
+errors_by_program() {
+    journalctl -b -p err -o export --no-pager 2> /dev/null | sed -n 's/^SYSLOG_IDENTIFIER=//p' \
+        | sort | uniq -c | sort -rn | head -n 25
+}
+
+if [ "$mode" = stdout ]; then
+    report
+    exit 0
+fi
+file="$HOME/envy-hardware-report-$(date '+%Y%m%d-%H%M').md"
+report > "$file" || { echo "envy-hardware-report: couldn't write $file" >&2; exit 1; }
+echo "Wrote $file"
+echo "Share it at https://github.com/xzchick/envy-black-veil/issues/new?template=hardware-report.yml"
+if [ "$mode" = open ]; then
+    xdg-open "$file" > /dev/null 2>&1 &
+fi

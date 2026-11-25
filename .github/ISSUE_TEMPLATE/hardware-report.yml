@@ -1,0 +1,72 @@
+name: Hardware report
+description: How ENVY BLACK VEIL ran on your computer, whether everything worked or not
+title: "Hardware: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for trying BLACK VEIL on a real computer. A report where everything works is as useful as one where something doesn't.
+
+        In BLACK VEIL, open **Hardware Report** from the app menu, or run `envy-hardware-report` in a terminal. It writes a file to your home folder describing this computer's hardware, its drivers and any firmware problems, and leaves out serial numbers, MAC and IP addresses, UUIDs and your user and host names. Read it, then paste it below.
+
+        On BLACK VEIL 0.1.0, which came out before the report, get it first: `curl -fsSLO https://raw.githubusercontent.com/xzchick/envy-black-veil/main/tools/envy-hardware-report && bash envy-hardware-report`
+  - type: input
+    id: computer
+    attributes:
+      label: Computer
+      description: Make and model, e.g. "Lenovo ThinkPad T14 Gen 3 (AMD)", or the main parts of a self-built PC.
+    validations:
+      required: true
+  - type: dropdown
+    id: version
+    attributes:
+      label: BLACK VEIL version
+      options:
+        - 0.1.0 (release)
+        - A newer build from the ISO workflow
+    validations:
+      required: true
+  - type: dropdown
+    id: how
+    attributes:
+      label: How you ran it
+      options:
+        - Live, from a USB stick
+        - Live, from a USB stick, keeping changes on the stick
+        - Installed on an internal disk
+        - Installed on an external drive
+    validations:
+      required: true
+  - type: checkboxes
+    id: works
+    attributes:
+      label: What worked
+      description: Tick what worked. Leave the rest unticked, and say in the notes which of those you didn't try.
+      options:
+        - label: Boots with Secure Boot on
+        - label: The boot menu and the ENVY splash look right
+        - label: The desktop at the screen's full resolution, moving smoothly
+        - label: Wi-Fi
+        - label: Ethernet
+        - label: Bluetooth
+        - label: Sound from the speakers or headphones
+        - label: Microphone
+        - label: Webcam
+        - label: Touchpad, keyboard and its brightness and volume keys
+        - label: An external display
+        - label: Suspend and resume (close the lid, then open it)
+        - label: Battery level
+        - label: The installer finished
+        - label: The installed system asks for the disk passphrase and starts
+  - type: textarea
+    id: report
+    attributes:
+      label: Hardware report
+      description: Paste the contents of the envy-hardware-report-….md file.
+    validations:
+      required: true
+  - type: textarea
+    id: notes
+    attributes:
+      label: What didn't work, and anything else
+      description: What you tried, what happened and what you expected. Photos of error screens help.
