@@ -78,8 +78,11 @@ if [ ! -f "$DISK" ]; then
     qemu-img create -q -f qcow2 "$DISK" "$DISK_SIZE"
 fi
 
-# Hardware acceleration when the VM matches this computer.
+# Hardware acceleration when the VM matches this computer. Emulated ARM uses a real
+# server core: QEMU's "max" ARM CPU has newer instructions (FEAT_MOPS) whose emulation
+# can crash the kernel.
 accel=(-accel "tcg,thread=multi" -cpu max)
+[ "$ARCH" = aarch64 ] && accel=(-accel "tcg,thread=multi" -cpu neoverse-n1)
 if [ "$ARCH" = "$HOST_ARCH" ]; then
     if [ "$OS" = Darwin ]; then
         accel=(-accel hvf -cpu host)

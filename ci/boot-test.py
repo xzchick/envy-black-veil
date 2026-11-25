@@ -71,6 +71,7 @@ PLATFORMS = {
         "display": ["-vga", "none", "-device", "virtio-vga,edid=on,xres=1600,yres=900"],
         "input": [],
         "tty": "ttyS0",
+        "tcg_cpu": "max",
     },
     "aarch64": {
         "qemu": "qemu-system-aarch64",
@@ -82,6 +83,9 @@ PLATFORMS = {
         "display": ["-device", "virtio-gpu-pci,edid=on,xres=1600,yres=900"],
         "input": ["-device", "qemu-xhci", "-device", "usb-kbd", "-device", "usb-tablet"],
         "tty": "ttyAMA0",
+        # Emulated, a real server core rather than QEMU's "max": its newest features
+        # (FEAT_MOPS memset in QEMU 8.2) crash the kernel while it loads modules.
+        "tcg_cpu": "neoverse-n1",
     },
 }
 PLATFORM = PLATFORMS["x86_64"]           # set from --arch in main()
@@ -377,7 +381,8 @@ def start_qemu(args, out: Path, name: str, extra: list[str], cdrom=True,
                machine: list[str] | None = None) -> tuple[subprocess.Popen, QMP]:
     qmp_path = SOCKETS / f"{name}.qmp"
     qmp_path.unlink(missing_ok=True)
-    accel = ["-accel", "tcg,thread=multi", "-cpu", "max"] if ACCEL == "tcg" else ["-accel", ACCEL, "-cpu", "host"]
+    accel = (["-accel", "tcg,thread=multi", "-cpu", PLATFORM["tcg_cpu"]] if ACCEL == "tcg"
+             else ["-accel", ACCEL, "-cpu", "host"])
     cmd = [PLATFORM["qemu"], "-name", f"envy-{name}"] + accel + (machine or PLATFORM["machine"]) + [
            "-m", str(args.mem), "-smp", str(args.cpus)] + PLATFORM["display"] + PLATFORM["input"] + [
            "-display", "none", "-nic", "user,model=virtio-net-pci",
@@ -896,6 +901,8 @@ def main() -> int:
     ap.add_argument("--install-timeout", type=int, default=3600)
     ap.add_argument("--disk-size", default="30G")
     ap.add_argument("--keep-disk", action="store_true", help="keep the installed disk (installed-disk.qcow2) afterwards")
+    ap.add_argument("--accel", choices=["auto", "kvm", "hvf", "tcg"], default="auto",
+                    help="force an accelerator (tcg reproduces CI's emulated ARM runs)")
     ap.add_argument("--installed-disk", type=Path,
                     help="skip the live boots and the install; boot and check this already-installed disk")
     ap.add_argument("--arch", choices=sorted(PLATFORMS),
@@ -906,7 +913,7 @@ def main() -> int:
     # Hardware virtualization runs only the computer's own architecture. Without it
     # the VM is emulated (several times slower): stretch the waits, and skip the
     # install, which would take hours.
-    ACCEL = (hardware_accel() if args.arch == HOST_ARCH else None) or "tcg"
+    ACCEL = args.accel if args.accel != "auto" else (hardware_accel() if args.arch == HOST_ARCH else None) or "tcg"
     args.slow = SLOW = 6 if ACCEL == "tcg" else 1
     print(f"{args.arch} VMs, " + {"kvm": "KVM", "hvf": "Hypervisor framework"}.get(
         ACCEL, f"emulated (no hardware virtualization for {args.arch} here)"), flush=True)
