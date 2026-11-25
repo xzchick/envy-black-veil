@@ -17,14 +17,23 @@ drive were moved to another PC: it types the disk passphrase into the ENVY splas
 reaches the login screen, logs in over serial and checks the installed system,
 then signs in graphically for a desktop screenshot.
 
+Secure Boot (x86_64, where firmware with Microsoft's keys enrolled is available,
+as on most PCs and Hyper-V): the ISO boots through its own boot menu with Secure
+Boot on, and (with --install) so does the installed disk; each is checked from
+the inside for Secure Boot and kernel lockdown.
+
 Writes screenshots, serial logs, results.json and summary.md to --out and exits
-non-zero if a required check fails. Needs qemu-system-x86_64, OVMF, qemu-img,
-xorriso and /dev/kvm. Standard library only.
+non-zero if a required check fails. Needs QEMU (qemu-system-x86_64 or
+qemu-system-aarch64) with UEFI firmware, qemu-img and xorriso. It runs at full
+speed with KVM (Linux) or Apple's Hypervisor framework (macOS) when the ISO
+matches the computer's architecture, and emulated (slower, no install) otherwise.
+Standard library only.
 """
 
 from __future__ import annotations
 
 import argparse
+import base64
 import json
 import os
 import re
@@ -48,13 +57,17 @@ SOCKETS = Path(tempfile.mkdtemp(prefix="envy-bt-"))
 SUDO = "printf '\\n' | sudo -S -p ''"
 
 # How each architecture's VM is put together. aarch64 is what Apple Silicon Macs
-# (UTM, Parallels, VMware Fusion) and ARM PCs run natively.
+# (UTM, Parallels, VMware Fusion) and ARM PCs run natively. Firmware: Debian/Ubuntu,
+# Fedora/EL, then QEMU's own copies (Homebrew on macOS).
+QEMU_SHARE = ["/opt/homebrew/share/qemu", "/usr/local/share/qemu", "/usr/share/qemu"]
 PLATFORMS = {
     "x86_64": {
         "qemu": "qemu-system-x86_64",
         "machine": ["-machine", "q35"],
-        "code": ["/usr/share/OVMF/OVMF_CODE_4M.fd", "/usr/share/OVMF/OVMF_CODE.fd"],
-        "vars": ["/usr/share/OVMF/OVMF_VARS_4M.fd", "/usr/share/OVMF/OVMF_VARS.fd"],
+        "code": ["/usr/share/OVMF/OVMF_CODE_4M.fd", "/usr/share/OVMF/OVMF_CODE.fd",
+                 "/usr/share/edk2/ovmf/OVMF_CODE.fd"] + [f"{d}/edk2-x86_64-code.fd" for d in QEMU_SHARE],
+        "vars": ["/usr/share/OVMF/OVMF_VARS_4M.fd", "/usr/share/OVMF/OVMF_VARS.fd",
+                 "/usr/share/edk2/ovmf/OVMF_VARS.fd"] + [f"{d}/edk2-i386-vars.fd" for d in QEMU_SHARE],
         "display": ["-vga", "none", "-device", "virtio-vga,edid=on,xres=1600,yres=900"],
         "input": [],
         "tty": "ttyS0",
@@ -62,15 +75,31 @@ PLATFORMS = {
     "aarch64": {
         "qemu": "qemu-system-aarch64",
         "machine": ["-machine", "virt,gic-version=max"],
-        "code": ["/usr/share/AAVMF/AAVMF_CODE.fd"],
-        "vars": ["/usr/share/AAVMF/AAVMF_VARS.fd"],
+        "code": ["/usr/share/AAVMF/AAVMF_CODE.fd", "/usr/share/edk2/aarch64/QEMU_EFI-pflash.raw"]
+                + [f"{d}/edk2-aarch64-code.fd" for d in QEMU_SHARE],
+        "vars": ["/usr/share/AAVMF/AAVMF_VARS.fd", "/usr/share/edk2/aarch64/vars-template-pflash.raw"]
+                + [f"{d}/edk2-arm-vars.fd" for d in QEMU_SHARE],
         "display": ["-device", "virtio-gpu-pci,edid=on,xres=1600,yres=900"],
         "input": ["-device", "qemu-xhci", "-device", "usb-kbd", "-device", "usb-tablet"],
         "tty": "ttyAMA0",
     },
 }
 PLATFORM = PLATFORMS["x86_64"]           # set from --arch in main()
-KVM = os.access("/dev/kvm", os.R_OK | os.W_OK)
+HOST_ARCH = {"arm64": "aarch64", "amd64": "x86_64"}.get(os.uname().machine, os.uname().machine)
+
+
+def hardware_accel() -> str | None:
+    """KVM on Linux, the Hypervisor framework on macOS, or None."""
+    if os.access("/dev/kvm", os.R_OK | os.W_OK):
+        return "kvm"
+    if sys.platform == "darwin":
+        hv = subprocess.run(["sysctl", "-n", "kern.hv_support"], capture_output=True, text=True)
+        if hv.stdout.strip() == "1":
+            return "hvf"
+    return None
+
+
+ACCEL = "tcg"                            # set in main(): kvm, hvf, or tcg (emulated)
 
 # The throwaway identity of the CI install (never used outside these VMs).
 TEST_USER = "envytest"
@@ -78,6 +107,9 @@ TEST_PASSWORD = "envytest2026"
 LUKS_PASSPHRASE = "envyblackveiltest"
 TEST_SUDO = f"printf '{TEST_PASSWORD}\\n' | sudo -S -p ''"
 
+# The installer adds "rhgb quiet" (the graphical ENVY splash) only when it runs on a
+# screen, as it does from the desktop icon; this test drives it over a serial
+# console, so the kickstart adds them itself.
 def install_ks(tty: str) -> str:
     return f"""# Unattended BLACK VEIL install for CI: the live system onto a blank disk, UEFI,
 # LUKS2-encrypted, one admin user. Same installer and payload as the desktop's
@@ -90,12 +122,48 @@ network --hostname=black-veil
 rootpw --lock
 user --name={TEST_USER} --groups=wheel --password={TEST_PASSWORD} --plaintext
 firstboot --disable
+shutdown
 ignoredisk --only-use=vda
 zerombr
 clearpart --all --initlabel --drives=vda
-bootloader --boot-drive=vda --append="console=tty0 console={tty},115200n8 plymouth.ignore-serial-consoles systemd.show_status=1"
+bootloader --boot-drive=vda --append="rhgb quiet console=tty0 console={tty},115200n8 plymouth.ignore-serial-consoles systemd.show_status=1"
 autopart --type=lvm --encrypted --passphrase={LUKS_PASSPHRASE} --luks-version=luks2
 """
+
+
+# Anaconda reads a kickstart in live mode only as interactive defaults: it never marks
+# a live install as automated, so in --cmdline mode it stops at the disk selection
+# instead of partitioning. This runs the very same installer, payload and kickstart
+# with just that switch flipped, as an automated kickstart install sets it. (The
+# kickstart's "shutdown" only lets it exit by itself: a live system isn't shut down.)
+AUTOMATED_ANACONDA = """import runpy, sys
+import pyanaconda.startup_utils as startup_utils
+from pyanaconda.flags import flags
+
+find_kickstart = startup_utils.find_kickstart
+
+
+def automated(options):
+    path = find_kickstart(options)
+    flags.automatedInstall = True
+    flags.eject = False
+    return path
+
+
+startup_utils.find_kickstart = automated
+sys.argv = ["/usr/sbin/anaconda"] + sys.argv[1:]
+runpy.run_path("/usr/sbin/anaconda", run_name="__main__")
+"""
+
+
+def wait_for(con, pattern: str, timeout: float) -> bool:
+    """Wait until the serial output matches, without consuming it (login() reads it next)."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if re.search(pattern, con.buf, re.M):
+            return True
+        con.pump(0.5)
+    return False
 
 
 def first_existing(paths):
@@ -103,6 +171,38 @@ def first_existing(paths):
         if Path(p).exists():
             return p
     raise SystemExit(f"none of these exist: {paths}")
+
+
+# x86_64 UEFI firmware built for Secure Boot, with NVRAM that has Microsoft's keys
+# enrolled and Secure Boot on: what most PCs and Hyper-V's Generation 2 VMs ship with.
+SECURE_BOOT = {
+    "code": ["/usr/share/OVMF/OVMF_CODE_4M.secboot.fd", "/usr/share/edk2/ovmf/OVMF_CODE.secboot.fd"],
+    "vars": ["/usr/share/OVMF/OVMF_VARS_4M.ms.fd", "/usr/share/edk2/ovmf/OVMF_VARS.secboot.fd"],
+}
+SB_MACHINE = ["-machine", "q35,smm=on", "-global", "driver=cfi.pflash01,property=secure,value=on",
+              "-global", "ICH9-LPC.disable_s3=1"]
+
+
+def secure_boot_firmware(vars_copy: Path) -> list[str] | None:
+    """Secure Boot firmware arguments (x86_64 only), or None where there's none."""
+    if PLATFORM is not PLATFORMS["x86_64"]:
+        return None
+    code = next((p for p in SECURE_BOOT["code"] if Path(p).exists()), None)
+    nvram = next((p for p in SECURE_BOOT["vars"] if Path(p).exists()), None)
+    if not code or not nvram:
+        return None
+    shutil.copy(nvram, vars_copy)
+    return ["-drive", f"if=pflash,format=raw,readonly=on,file={code}",
+            "-drive", f"if=pflash,format=raw,file={vars_copy}"]
+
+
+def secure_boot_checks(res: Results, prefix: str, sudo: str) -> None:
+    res.check(f"{prefix}Secure Boot is on",
+              "od -An -tu1 /sys/firmware/efi/efivars/SecureBoot-8be4df61-93ca-11d2-aa0d-e0f6e2c33c69 | awk '{print $NF}'",
+              ok=lambda rc, o: o == "1")
+    res.check(f"{prefix}kernel lockdown (Secure Boot's protection of the running kernel)",
+              "cat /sys/kernel/security/lockdown", ok=lambda rc, o: "[integrity]" in o or "[confidentiality]" in o)
+    res.check(f"{prefix}kernel log", f"{sudo} dmesg | grep -i -m3 -E 'secure ?boot'", required=False)
 
 
 def ovmf(vars_copy: Path) -> list[str]:
@@ -144,7 +244,8 @@ def connect_unix(path: Path, timeout=30.0) -> socket.socket:
             time.sleep(0.2)
 
 
-KEY_NAMES = {" ": ["spc"], "-": ["minus"], ".": ["dot"], "/": ["slash"], "_": ["shift", "minus"]}
+KEY_NAMES = {" ": ["spc"], "-": ["minus"], ".": ["dot"], "/": ["slash"], "_": ["shift", "minus"],
+             "=": ["equal"], ",": ["comma"], ":": ["shift", "semicolon"]}
 
 
 class QMP:
@@ -203,11 +304,12 @@ class QMP:
             pass
 
 
-def start_qemu(args, out: Path, name: str, extra: list[str], cdrom=True) -> tuple[subprocess.Popen, QMP]:
+def start_qemu(args, out: Path, name: str, extra: list[str], cdrom=True,
+               machine: list[str] | None = None) -> tuple[subprocess.Popen, QMP]:
     qmp_path = SOCKETS / f"{name}.qmp"
     qmp_path.unlink(missing_ok=True)
-    accel = ["-enable-kvm", "-cpu", "host"] if KVM else ["-accel", "tcg,thread=multi", "-cpu", "max"]
-    cmd = [PLATFORM["qemu"], "-name", f"envy-{name}"] + accel + PLATFORM["machine"] + [
+    accel = ["-accel", "tcg,thread=multi", "-cpu", "max"] if ACCEL == "tcg" else ["-accel", ACCEL, "-cpu", "host"]
+    cmd = [PLATFORM["qemu"], "-name", f"envy-{name}"] + accel + (machine or PLATFORM["machine"]) + [
            "-m", str(args.mem), "-smp", str(args.cpus)] + PLATFORM["display"] + PLATFORM["input"] + [
            "-display", "none", "-nic", "user,model=virtio-net-pci",
            "-qmp", f"unix:{qmp_path},server=on,wait=off"]
@@ -331,6 +433,24 @@ def no_network_listeners(prefix, sudo):
     ]
 
 
+def no_phone_home(prefix, sudo):
+    return [
+        (f"{prefix}no connectivity check to an outside server",
+         f"{sudo} NetworkManager --print-config 2>/dev/null | sed -n '/^\\[connectivity\\]/,/^\\[/p'",
+         lambda rc, o: rc == 0 and ("enabled=false" in o or "uri=" not in o), True),
+        (f"{prefix}firmware metadata isn't fetched on a timer", "systemctl is-enabled fwupd-refresh.timer 2>&1",
+         lambda rc, o: "enabled" not in o.split(), True),
+        (f"{prefix}DNF's weekly count (countme) is off", "grep -l '^countme=1' /etc/yum.repos.d/*.repo | wc -l",
+         lambda rc, o: o == "0", True),
+        (f"{prefix}Firefox: no telemetry, studies or sponsored content",
+         "python3 -c \"import json; p = json.load(open('/etc/firefox/policies/policies.json'))['policies']; "
+         "print(p['DisableTelemetry'], p['DisableFirefoxStudies'], p['FirefoxHome']['SponsoredTopSites'])\"",
+         lambda rc, o: o == "True True False", True),
+        (f"{prefix}no remote-desktop, file-sharing or web-console servers installed",
+         "rpm -q krfb krdp samba cockpit-ws 2>&1 | grep -c 'is not installed'", lambda rc, o: o == "4", True),
+    ]
+
+
 # ----- boot 1: the real boot path ---------------------------------------------
 
 def boot_real(args, out: Path) -> list[str]:
@@ -351,6 +471,46 @@ def boot_real(args, out: Path) -> list[str]:
         stop_qemu(proc, qmp)
     print(f"  {len(shots)} screenshots", flush=True)
     return shots
+
+
+def boot_secure_live(args, out: Path, res: Results) -> None:
+    """Boot the ISO through its own boot menu with Secure Boot on, and check from inside."""
+    firmware = secure_boot_firmware(out / "OVMF_VARS_sb-live.fd")
+    if firmware is None:
+        print("== Secure Boot (live): skipped; no Secure Boot firmware with Microsoft's keys here", flush=True)
+        return
+    print("== Secure Boot (live): the ISO's signed boot chain (shim -> GRUB -> kernel) with Secure Boot on", flush=True)
+    kernel, initrd, volid = iso_paths(args.iso)
+    serial_path = SOCKETS / "serial-sb.sock"
+    serial_path.unlink(missing_ok=True)
+    proc, qmp = start_qemu(args, out, "sb-live", firmware + [
+        "-chardev", f"socket,id=sersb,path={serial_path},server=on,wait=off", "-serial", "chardev:sersb"],
+        machine=SB_MACHINE)
+    con = Serial(serial_path, out / "serial-secureboot-live.log")
+    res.console = con
+    try:
+        # The firmware mirrors GRUB's text menu to the serial port; wait for it, but well
+        # inside the menu's 60-second timeout either way.
+        con.expect(r"BLACK VEIL", 40)
+        time.sleep(3)
+        qmp.screenshot(out / "secureboot-menu.png")
+        # From the boot menu, GRUB's own command line boots the live system with a
+        # serial console added (GRUB allows this with Secure Boot on; the kernel it
+        # loads must still pass shim's signature check).
+        qmp.type_text("c", enter=False)
+        time.sleep(2)
+        qmp.type_text(f"linux {kernel} root=live:CDLABEL={volid} rd.live.image quiet rhgb console=tty0 "
+                      f"console={PLATFORM['tty']},115200n8 plymouth.ignore-serial-consoles")
+        qmp.type_text(f"initrd {initrd}")
+        qmp.screenshot(out / "secureboot-grub-commands.png")
+        qmp.type_text("boot")
+        ok = con.login("liveuser", "", first_timeout=420)
+        res.record("Secure Boot (live): boots to a login with Secure Boot on", ok,
+                   "logged in over serial" if ok else "no login; see secureboot-*.png and serial-secureboot-live.log")
+        if ok:
+            secure_boot_checks(res, "Secure Boot (live): ", SUDO)
+    finally:
+        stop_qemu(proc, qmp)
 
 
 # ----- boot 2: the live system, then the install -------------------------------
@@ -404,7 +564,7 @@ def live_checks(res: Results, qmp: QMP, args, out: Path) -> None:
     res.check("graphical target reached", "systemctl is-active graphical.target", ok=lambda rc, o: o == "active")
     res.check("SDDM login manager active", "systemctl is-active sddm", ok=lambda rc, o: o == "active")
     res.check("booted with UEFI", "test -d /sys/firmware/efi && echo uefi", ok=lambda rc, o: o == "uefi")
-    for name, command, ok, required in no_network_listeners("", SUDO):
+    for name, command, ok, required in no_network_listeners("", SUDO) + no_phone_home("", SUDO):
         res.check(name, command, ok=ok, required=required)
     res.check("ENVY packages installed", "rpm -q envy-black-veil-theme envy-black-veil-release")
     res.check("ENVY release file", "cat /etc/envy-black-veil-release", ok=lambda rc, o: "ENVY BLACK VEIL" in o)
@@ -421,6 +581,10 @@ def live_checks(res: Results, qmp: QMP, args, out: Path) -> None:
     res.check("installer is on the menu", "grep -m1 '^Name=' /usr/share/applications/liveinst.desktop",
               ok=lambda rc, o: "ENVY BLACK VEIL" in o)
     res.check("installer is on the live desktop", "ls ~/Desktop", ok=lambda rc, o: "liveinst.desktop" in o)
+    res.check("installer doesn't look you up online (no geolocation)",
+              "python3 -c 'from pyanaconda.core.configuration.anaconda import conf; conf.set_from_files(); "
+              "print(repr(conf.timezone.geolocation_provider), conf.localization.use_geolocation)'",
+              ok=lambda rc, o: o == "'' False")
     res.check("envy-tools works", "envy-tools list | head -6")
     res.check("ENVY app runtime (Python, PyQt6, cryptography)",
               "python3 -c 'import PyQt6.QtWidgets, cryptography; print(\"ok\")'", ok=lambda rc, o: o.endswith("ok"))
@@ -433,6 +597,8 @@ def install_to_disk(res: Results, args, out: Path) -> bool:
     con = res.console
     con.run("cat > /tmp/envy-install.ks << 'EOF'\n" + install_ks(PLATFORM["tty"]) + "EOF\ntrue", 30)
     res.check("install: kickstart in place", "grep -c . /tmp/envy-install.ks")
+    wrapper = base64.b64encode(AUTOMATED_ANACONDA.encode()).decode()
+    con.run(f"echo {wrapper} | base64 -d > /tmp/envy-anaconda.py", 30)
     # Run the installer in the background (the serial shell stays responsive), then poll.
     # The same environment liveinst sets up (it's what the desktop icon runs, via pkexec):
     # the live user's session bus and PKEXEC_UID, which Anaconda uses to switch to the
@@ -446,9 +612,9 @@ def install_to_disk(res: Results, args, out: Path) -> bool:
            " ANACONDA_ISFINAL=true")
     # In live mode Anaconda ignores --kickstart and parses its interactive defaults,
     # /usr/share/anaconda/interactive-defaults.ks, instead; in this throwaway live VM the
-    # test's kickstart takes that file's place.
+    # test's kickstart takes that file's place, and AUTOMATED_ANACONDA runs it unattended.
     con.run("{ ( " + SUDO + " " + env + " sh -c 'cp /tmp/envy-install.ks /usr/share/anaconda/interactive-defaults.ks;"
-            " setenforce 0; anaconda --liveinst --cmdline --kickstart=/tmp/envy-install.ks"
+            " setenforce 0; python3 /tmp/envy-anaconda.py --liveinst --cmdline"
             " > /tmp/envy-install.log 2>&1; echo $? > /tmp/envy-install.rc; setenforce 1' ) > /dev/null 2>&1 & }", 30)
     started, last, status = time.monotonic(), "", None
     while time.monotonic() - started < args.install_timeout:
@@ -512,46 +678,62 @@ def boot_live(args, out: Path, res: Results, disk: Path | None) -> bool:
 
 # ----- boot 3: the installed system --------------------------------------------
 
-def boot_installed(args, out: Path, res: Results, disk: Path) -> None:
-    print("== Boot 3: the installed disk on fresh UEFI firmware (like moving the drive to another PC)", flush=True)
-    serial_path = SOCKETS / "serial3.sock"
+def boot_installed(args, out: Path, res: Results, disk: Path, secure: bool = False) -> None:
+    name, pre = ("boot4", "installed + Secure Boot: ") if secure else ("boot3", "installed: ")
+    firmware = secure_boot_firmware(out / f"OVMF_VARS_{name}.fd") if secure else ovmf(out / f"OVMF_VARS_{name}.fd")
+    if firmware is None:
+        print("== Secure Boot (installed): skipped; no Secure Boot firmware with Microsoft's keys here", flush=True)
+        return
+    print("== Boot 4: the installed disk with Secure Boot on" if secure else
+          "== Boot 3: the installed disk on fresh UEFI firmware (like moving the drive to another PC)", flush=True)
+    serial_path = SOCKETS / f"serial-{name}.sock"
     serial_path.unlink(missing_ok=True)
-    proc, qmp = start_qemu(args, out, "boot3", ovmf(out / "OVMF_VARS_boot3.fd") + [
+    proc, qmp = start_qemu(args, out, name, firmware + [
         "-drive", f"file={disk},if=virtio,cache=writeback",
-        "-chardev", f"socket,id=ser3,path={serial_path},server=on,wait=off", "-serial", "chardev:ser3"], cdrom=False)
-    con = Serial(serial_path, out / "serial-installed.log")
+        "-chardev", f"socket,id=ser3,path={serial_path},server=on,wait=off", "-serial", "chardev:ser3"], cdrom=False,
+        machine=SB_MACHINE if secure else None)
+    con = Serial(serial_path, out / ("serial-installed-secureboot.log" if secure else "serial-installed.log"))
     res.console = con
     try:
+        # Firmware, GRUB, then the initrd starts the ENVY splash, which asks for the disk
+        # passphrase. Plymouth takes over the console once it starts, so the last thing the
+        # serial console shows is the splash starting (systemd.show_status=1).
         start, next_shot, asked = time.monotonic(), 0.0, False
-        while time.monotonic() - start < 420:            # GRUB, splash, then the passphrase prompt
+        while time.monotonic() - start < 420:
             con.pump(0.5)
-            if re.search(r"Cryptography Setup|systemd-cryptsetup@|Please enter passphrase", con.buf):
+            if re.search(r"Show Plymouth Boot Screen|Cryptography Setup|Please enter passphrase", con.buf):
                 asked = True
                 break
             t = time.monotonic() - start
             if t >= next_shot and next_shot < 120:
-                qmp.screenshot(out / f"boot3-{int(t):03d}s.png")
-                next_shot += 2.5
-        res.record("installed: boots and asks for the disk passphrase", asked,
-                   f"after {int(time.monotonic() - start)}s" if asked else "no passphrase prompt seen on the serial console")
+                qmp.screenshot(out / f"{name}-{int(t):03d}s.png")
+                next_shot += 2.5 if not secure else 10
+        res.record(f"{pre}boots to the ENVY splash, which asks for the disk passphrase", asked,
+                   f"splash after {int(time.monotonic() - start)}s" if asked else "the boot splash never started (see the boot screenshots)")
         if not asked:
             return
+        # Type the passphrase into the splash like a person would. Keys typed before the
+        # prompt is up are ignored, so if the boot doesn't go on, try again.
         unlocked = False
         for attempt in range(3):
-            time.sleep(8)
-            qmp.screenshot(out / ("installed-luks.png" if attempt == 0 else f"installed-luks-retry{attempt}.png"))
+            time.sleep(15 if attempt == 0 else 5)
+            if not secure:
+                qmp.screenshot(out / ("installed-luks.png" if attempt == 0 else f"installed-luks-retry{attempt}.png"))
             con.buf = ""                                 # only signs that come after typing count
             qmp.type_text(LUKS_PASSPHRASE)
-            if con.expect(r"Finished.*Cryptography Setup|Reached target.*Initrd Root|login:", 60):
+            if wait_for(con, r"login:\s*$|Reached target.*(Initrd Root|Switch Root|Multi-User|Graphical)", 150):
                 unlocked = True
                 break
-        res.record("installed: unlocks with the passphrase typed into the ENVY splash", unlocked,
+        res.record(f"{pre}unlocks with the passphrase typed into the ENVY splash", unlocked,
                    "unlocked" if unlocked else "no sign of the disk unlocking after 3 tries")
         if not unlocked:
             return
         logged_in = con.login(TEST_USER, TEST_PASSWORD, first_timeout=600)
-        res.record("installed: boots to a login", logged_in, "logged in over serial" if logged_in else "no login")
+        res.record(f"{pre}boots to a login", logged_in, "logged in over serial" if logged_in else "no login")
         if not logged_in:
+            return
+        if secure:
+            secure_boot_checks(res, pre, TEST_SUDO)
             return
         deadline = time.monotonic() + 240
         while time.monotonic() < deadline:
@@ -582,7 +764,7 @@ def boot_installed(args, out: Path, res: Results, disk: Path) -> None:
         res.check("installed: ENVY GRUB menu switched on",
                   "grep -E '^GRUB_(THEME|TERMINAL_OUTPUT)=' /etc/default/grub; " + s + " grep -c 'envy-black-veil' /boot/grub2/grub.cfg",
                   ok=lambda rc, o: "envy-black-veil/theme.txt" in o and "gfxterm" in o)
-        for name, command, ok, required in no_network_listeners("installed: ", s):
+        for name, command, ok, required in no_network_listeners("installed: ", s) + no_phone_home("installed: ", s):
             res.check(name, command, ok=ok, required=required)
         res.check("installed: ENVY packages", "rpm -q envy-black-veil-theme envy-black-veil-release")
         res.check("installed: ENVY colours for the new user (skel)",
@@ -629,34 +811,48 @@ def main() -> int:
     ap.add_argument("--install", action="store_true", help="also install to a blank disk and boot the installed system")
     ap.add_argument("--install-timeout", type=int, default=3600)
     ap.add_argument("--disk-size", default="30G")
-    ap.add_argument("--arch", choices=sorted(PLATFORMS), default=os.uname().machine
-                    if os.uname().machine in PLATFORMS else "x86_64")
+    ap.add_argument("--keep-disk", action="store_true", help="keep the installed disk (installed-disk.qcow2) afterwards")
+    ap.add_argument("--installed-disk", type=Path,
+                    help="skip the live boots and the install; boot and check this already-installed disk")
+    ap.add_argument("--arch", choices=sorted(PLATFORMS),
+                    default=HOST_ARCH if HOST_ARCH in PLATFORMS else "x86_64")
     args = ap.parse_args()
-    global PLATFORM
+    global PLATFORM, ACCEL
     PLATFORM = PLATFORMS[args.arch]
-    # Without KVM the VM is emulated (several times slower): stretch the waits, and
-    # skip the install, which would take hours.
-    args.slow = 1 if KVM else 6
-    print(f"{args.arch} VMs, {'KVM' if KVM else 'emulated (no /dev/kvm)'}", flush=True)
-    if args.install and not KVM:
-        print("  no KVM: skipping the install test (it needs hardware virtualization to finish in time)")
+    # Hardware virtualization runs only the computer's own architecture. Without it
+    # the VM is emulated (several times slower): stretch the waits, and skip the
+    # install, which would take hours.
+    ACCEL = (hardware_accel() if args.arch == HOST_ARCH else None) or "tcg"
+    args.slow = 6 if ACCEL == "tcg" else 1
+    print(f"{args.arch} VMs, " + {"kvm": "KVM", "hvf": "Hypervisor framework"}.get(
+        ACCEL, f"emulated (no hardware virtualization for {args.arch} here)"), flush=True)
+    if args.install and ACCEL == "tcg":
+        print("  emulated: skipping the install test (it needs hardware virtualization to finish in time)")
         args.install = False
     args.iso = args.iso.resolve()
     args.out.mkdir(parents=True, exist_ok=True)
     out = args.out.resolve()
 
-    shots = [] if args.skip_real_boot else boot_real(args, out)
     res = Results()
-    disk = None
-    if args.install:
-        disk = out / "installed-disk.qcow2"
-        disk.unlink(missing_ok=True)
-        subprocess.run(["qemu-img", "create", "-q", "-f", "qcow2", str(disk), args.disk_size], check=True)
-    installed = boot_live(args, out, res, disk)
-    if args.install and installed:
-        boot_installed(args, out, res, disk)
-    if disk and disk.exists():
-        disk.unlink()                                   # 10+ GB; not worth keeping
+    if args.installed_disk:                             # iterate on the installed-system checks
+        shots = []
+        boot_installed(args, out, res, args.installed_disk.resolve())
+        boot_installed(args, out, res, args.installed_disk.resolve(), secure=True)
+    else:
+        shots = [] if args.skip_real_boot else boot_real(args, out)
+        if not args.skip_real_boot:
+            boot_secure_live(args, out, res)
+        disk = None
+        if args.install:
+            disk = out / "installed-disk.qcow2"
+            disk.unlink(missing_ok=True)
+            subprocess.run(["qemu-img", "create", "-q", "-f", "qcow2", str(disk), args.disk_size], check=True)
+        installed = boot_live(args, out, res, disk)
+        if args.install and installed:
+            boot_installed(args, out, res, disk)
+            boot_installed(args, out, res, disk, secure=True)
+        if disk and disk.exists() and not args.keep_disk:
+            disk.unlink()                               # 10+ GB; not worth keeping
 
     results = res.items
     failed = [r for r in results if r["required"] and not r["ok"]]

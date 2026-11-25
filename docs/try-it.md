@@ -29,7 +29,21 @@ Get-Content .\envy-black-veil-0.1.0-x86_64.iso.sha256
 
 Whatever you use, give the VM **UEFI firmware**, **4 GB of RAM or more** (6 GB is comfortable), **2+ CPUs**, and a **40 GB** disk if you want to install. The live session logs in by itself as `liveuser`; the desktop's **Install ENVY BLACK VEIL** icon installs it.
 
-## 2. macOS and Linux: one command
+## 2. One command: macOS, Linux and Windows
+
+### Windows (Hyper-V)
+
+[`try-black-veil.ps1`](../try-black-veil.ps1) sets up a Hyper-V VM the way BLACK VEIL needs it — Generation 2 (UEFI), Secure Boot with the **Microsoft UEFI Certificate Authority** template, 6 GB of RAM, 4 CPUs, a 40 GB disk and the Default Switch — boots the ISO and opens the VM's window. It needs Windows 10/11 **Pro, Enterprise or Education** with Hyper-V turned on (*Settings → System → Optional features → More Windows features → Hyper-V*), run from an **administrator** PowerShell:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\try-black-veil.ps1 .\envy-black-veil-0.1.0-x86_64.iso
+powershell -ExecutionPolicy Bypass -File .\try-black-veil.ps1            # later: boot what you installed
+powershell -ExecutionPolicy Bypass -File .\try-black-veil.ps1 -Remove    # delete the VM and its disk
+```
+
+On Windows Home, use VirtualBox or VMware Workstation (section 3).
+
+### macOS and Linux
 
 [`try-black-veil.sh`](../try-black-veil.sh) starts the right VM for you with QEMU — UEFI firmware, a 40 GB virtual disk to install onto, and full hardware acceleration (Apple's Hypervisor framework on macOS, KVM on Linux):
 
@@ -57,7 +71,7 @@ Whatever you use, give the VM **UEFI firmware**, **4 GB of RAM or more** (6 GB i
 
 - **Hyper-V** (Windows Pro/Enterprise) — *New Virtual Machine* → **Generation 2** → 6144 MB → *Default Switch* → new 40 GB disk → install from the x86_64 ISO. Then *Settings → Security*: keep Secure Boot on with the **Microsoft UEFI Certificate Authority** template (BLACK VEIL uses AlmaLinux's signed boot chain), or turn Secure Boot off if it won't start.
 - **VirtualBox** (free) — *New* → ISO: the x86_64 ISO → Type **Linux**, Version **Red Hat (64-bit)** → tick **Enable EFI** → 6144 MB, 4 CPUs → 40 GB disk. In *Display*, give it 128 MB video memory with **VMSVGA**.
-- **VMware Workstation Player** (free for personal use) — *Create a New Virtual Machine* → the x86_64 ISO → **Red Hat Enterprise Linux 9 64-bit** (or "Other Linux 6.x 64-bit") → 40 GB → *Customize Hardware*: 6 GB RAM, 4 CPUs; *Options → Advanced → Firmware: UEFI*.
+- **VMware Workstation Pro** (free for personal use) — *Create a New Virtual Machine* → the x86_64 ISO → **Red Hat Enterprise Linux 9 64-bit** (or "Other Linux 6.x 64-bit") → 40 GB → *Customize Hardware*: 6 GB RAM, 4 CPUs; *Options → Advanced → Firmware: UEFI*.
 - **WSL** can't boot a desktop OS ISO; use one of the above.
 
 ### Linux
@@ -75,5 +89,5 @@ Write the ISO to a USB stick (≥ 4 GB) and boot from it — **Fedora Media Writ
 ## What to expect
 
 - The live desktop opens on its own, with the ENVY look. Nothing is written to any disk until you run the installer.
-- No accounts, no telemetry; SSH, printing and network discovery are off, and the firewall opens nothing.
+- No accounts, no telemetry, nothing phoning home on a timer; SSH, printing and network discovery are off, and the firewall opens nothing.
 - Add ENVY apps after installing: `envy-tools install vault veil hypothesis`, or the [ENVY Tools](https://github.com/xzchick/envy-tools) app.

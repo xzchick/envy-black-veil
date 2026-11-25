@@ -38,7 +38,9 @@ jobs:
             theme/plymouth/envy-black-veil/spark.svg
 
       - name: Validate JSON config
-        run: python3 -c "import json; json.load(open('theme/wallpaper/metadata.json'))"
+        run: |
+          python3 -c "import json; json.load(open('theme/wallpaper/metadata.json'))"
+          python3 -c "import json; p = json.load(open('privacy/firefox-policies.json'))['policies']; assert p['DisableTelemetry'] is True"
 
       - name: Lint desktop-entry generation
         run: |
@@ -49,6 +51,41 @@ jobs:
       - name: Build the ENVY identity RPMs (catches spec mistakes in a minute)
         run: |
           mkdir -p .build/SOURCES
-          tar --transform "s,^,envy-black-veil-0.1.0/," -czf .build/SOURCES/envy-black-veil-0.1.0.tar.gz theme tools LICENSE
+          tar --transform "s,^,envy-black-veil-0.1.0/," -czf .build/SOURCES/envy-black-veil-0.1.0.tar.gz theme tools privacy LICENSE
           rpmbuild --nodeps --define "_topdir $PWD/.build" -bb packaging/envy-black-veil.spec
           for f in .build/RPMS/noarch/*.rpm; do echo "== $f"; rpm -qlp "$f"; done
+
+  windows-launcher:
+    # GitHub's Windows machines have no Hyper-V, so try-black-veil.ps1 can't start a VM
+    # here; it must still parse in Windows PowerShell 5.1 (what Windows ships), pass
+    # PSScriptAnalyzer, and stop with its own clear message rather than a stack trace.
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Parse try-black-veil.ps1 in Windows PowerShell 5.1
+        shell: powershell
+        run: |
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile("$PWD\try-black-veil.ps1", [ref]$null, [ref]$errors) | Out-Null
+          if ($errors) { $errors | Format-List; exit 1 }
+          Write-Host "parses cleanly in PowerShell $($PSVersionTable.PSVersion)"
+
+      - name: PSScriptAnalyzer
+        shell: pwsh
+        run: |
+          Install-Module PSScriptAnalyzer -Force -Scope CurrentUser
+          $issues = Invoke-ScriptAnalyzer -Path .\try-black-veil.ps1 -Severity Warning, Error
+          $issues | Format-Table -AutoSize -Wrap
+          if ($issues | Where-Object Severity -eq 'Error') { exit 1 }
+
+      - name: It explains itself when it can't run a VM
+        shell: pwsh
+        run: |
+          $out = & powershell -NoProfile -ExecutionPolicy Bypass -File .\try-black-veil.ps1 .\no-such.iso 2>&1 | Out-String
+          $rc = $LASTEXITCODE
+          Write-Host $out
+          if ($rc -ne 1 -or $out -notmatch 'try-black-veil:') {
+            Write-Host "expected try-black-veil's own message and exit 1, got exit $rc"
+            exit 1
+          }

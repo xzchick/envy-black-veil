@@ -6,7 +6,7 @@
 
 Name:           envy-black-veil
 Version:        0.1.0
-Release:        2%{?dist}
+Release:        3%{?dist}
 Summary:        ENVY BLACK VEIL identity: theme and release identity
 License:        MIT
 URL:            https://github.com/xzchick/envy-black-veil
@@ -40,10 +40,11 @@ dark defaults in /etc/skel.
 Summary:        ENVY BLACK VEIL release file and the envy-tools installer
 
 %description release
-Marks the system as ENVY BLACK VEIL (/etc/envy-black-veil-release) and installs
-`envy-tools`, the on-demand installer for the ENVY application suite. AlmaLinux's
-own release package stays in place, so dnf, repositories and updates keep working
-exactly as on AlmaLinux 10.
+Marks the system as ENVY BLACK VEIL (/etc/envy-black-veil-release), installs
+`envy-tools`, the on-demand installer for the ENVY application suite, and sets
+the privacy defaults: no NetworkManager connectivity check, no geolocation lookup
+in the installer, and Firefox without telemetry, studies or sponsored content. AlmaLinux's own release package stays in
+place, so dnf, repositories and updates keep working exactly as on AlmaLinux 10.
 
 # ---------------------------------------------------------------------------
 %prep
@@ -108,6 +109,10 @@ install -d %{buildroot}%{_sysconfdir}
 echo "ENVY BLACK VEIL release %{version} (Nebula) — AlmaLinux 10 + KDE Plasma 6" \
     > %{buildroot}%{_sysconfdir}/envy-black-veil-release
 install -Dm755 tools/envy-tools   %{buildroot}%{_bindir}/envy-tools
+install -Dm644 privacy/90-envy-privacy.conf \
+    %{buildroot}%{_sysconfdir}/NetworkManager/conf.d/90-envy-privacy.conf
+install -Dm644 privacy/firefox-policies.json %{buildroot}%{_sysconfdir}/firefox/policies/policies.json
+install -Dm644 privacy/anaconda-90-envy-privacy.conf %{buildroot}%{_sysconfdir}/anaconda/conf.d/90-envy-privacy.conf
 
 %post theme
 if [ $1 -ge 1 ] && command -v plymouth-set-default-theme >/dev/null 2>&1; then
@@ -132,8 +137,18 @@ fi
 %license LICENSE
 %config(noreplace) %{_sysconfdir}/envy-black-veil-release
 %{_bindir}/envy-tools
+%config(noreplace) %{_sysconfdir}/NetworkManager/conf.d/90-envy-privacy.conf
+%dir %{_sysconfdir}/firefox
+%dir %{_sysconfdir}/firefox/policies
+%config(noreplace) %{_sysconfdir}/firefox/policies/policies.json
+%config(noreplace) %{_sysconfdir}/anaconda/conf.d/90-envy-privacy.conf
 
 %changelog
+* Wed Nov 25 2026 Envy <235594225+xzchick@users.noreply.github.com> - 0.1.0-3
+- Privacy defaults in the release package: no NetworkManager connectivity check, no
+  installer geolocation lookup, and Firefox policies with telemetry, studies, Pocket
+  and sponsored content off.
+
 * Tue Nov 24 2026 Envy <235594225+xzchick@users.noreply.github.com> - 0.1.0-2
 - Build on AlmaLinux 10's own live-media recipe: Anaconda live installer (Calamares
   is not packaged for EL10), livesys live session, the ENVY wallpaper as the default.

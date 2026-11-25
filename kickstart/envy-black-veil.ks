@@ -47,7 +47,7 @@ zerombr
 clearpart --all --initlabel
 part / --size=10238
 
-%packages
+%packages --excludedocs
 # Kernel
 kernel
 kernel-modules
@@ -115,6 +115,42 @@ alsa-sof-firmware
 
 # Nothing that phones home or listens by default
 -PackageKit-command-not-found
+# No connectivity check (NetworkManager would fetch a test page from Red Hat's
+# servers every few minutes); the release package also switches it off.
+-NetworkManager-config-connectivity-redhat
+# No servers a privacy-first desktop doesn't run: Cockpit's web console, Samba file
+# sharing, and KDE's desktop sharing over VNC (krfb) and RDP (krdp). Each is a leaf
+# nothing else needs; install one if you want it.
+-cockpit
+-cockpit-bridge
+-cockpit-packagekit
+-cockpit-storaged
+-cockpit-system
+-cockpit-ws
+-cockpit-ws-selinux
+-samba
+-samba-usershares
+-krfb
+-krfb-libs
+-krdp
+-krdp-libs
+
+# Leaner than the stock KDE spin, so the ISO fits a single download (under 2 GiB):
+# KDE's 250 MB wallpaper collection (BLACK VEIL has its own), the Akonadi PIM
+# database server and the MariaDB it runs on (no installed app uses them), and the
+# legacy printer-driver database (driverless printing works once CUPS is on).
+# Documentation in /usr/share/doc is left out too (--excludedocs above); man pages
+# and licences stay.
+-plasma-workspace-wallpapers
+-akonadi-server
+-akonadi-server-mysql
+-foomatic
+-foomatic-db
+-foomatic-db-ppds
+-pnm2ppa
+# KDE's Welcome Center takes the base system's name ("Welcome to AlmaLinux!") and
+# offers to install AlmaLinux; the desktop's Install ENVY BLACK VEIL icon does that.
+-plasma-welcome
 %end
 
 # --- Finishing touches on the built image ------------------------------------
@@ -135,11 +171,15 @@ EOF
 
 # Privacy: nothing listens on the network by default. Printing and network
 # discovery stay installed but off until you turn them on.
-# (Cockpit comes in with the installer's dependencies; its socket would listen on 9090.)
-for unit in cups.service cups.socket cups-browsed.service avahi-daemon.service avahi-daemon.socket \
-            cockpit.socket cockpit.service; do
+for unit in cups.service cups.socket cups-browsed.service avahi-daemon.service avahi-daemon.socket; do
     systemctl disable "$unit" 2>/dev/null || :
 done
+
+# Privacy: nothing phones home on a timer. Firmware metadata is fetched when you ask
+# (fwupdmgr refresh), and DNF doesn't send its weekly "countme" ping to the mirrors
+# (updates themselves are still checked).
+systemctl disable fwupd-refresh.timer 2>/dev/null || :
+sed -i 's/^countme=1/countme=0/' /etc/yum.repos.d/*.repo
 
 # The ENVY boot splash and login screen
 plymouth-set-default-theme envy-black-veil

@@ -1,0 +1,113 @@
+name: Release
+
+# Publish the ENVY BLACK VEIL ISOs when a v* tag is pushed. The ISO workflow builds
+# both architectures and must pass all of its checks first (boot, Secure Boot, the
+# encrypted install and the installed system); then this attaches the ISOs, their
+# package lists and CycloneDX SBOMs, and one SHA256SUMS.txt signed with Sigstore.
+
+on:
+  push:
+    tags:
+      - 'v*'
+  # Manual dry run: builds, tests and signs, but publishes nothing.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  iso:
+    uses: ./.github/workflows/iso.yml
+
+  publish:
+    needs: iso
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # create the release
+      id-token: write   # OIDC token for Sigstore keyless signing
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: envy-black-veil-iso*
+          path: dist
+          merge-multiple: true
+
+      - name: Check the ISOs (checksums, and GitHub's 2 GiB limit per file)
+        run: |
+          cd dist
+          ls -la
+          sha256sum -c ./*.iso.sha256
+          for iso in ./*.iso; do
+            size=$(stat -c %s "$iso")
+            [ "$size" -lt 2147483648 ] || { echo "$iso is $size bytes, over GitHub's 2 GiB limit for a release file"; exit 1; }
+          done
+          rm -f ./*.iso.sha256
+
+      - name: Write combined checksums
+        run: |
+          cd dist
+          sha256sum -- * > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3.7.0
+
+      - name: Sign the checksums (Sigstore keyless)
+        run: cosign sign-blob --yes --bundle dist/SHA256SUMS.txt.sigstore.json dist/SHA256SUMS.txt
+
+      - name: Verify the signature
+        run: |
+          cosign verify-blob \
+            --bundle dist/SHA256SUMS.txt.sigstore.json \
+            --certificate-identity-regexp '^https://github.com/xzchick/envy-black-veil/' \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            dist/SHA256SUMS.txt
+
+      - name: Write the release notes
+        env:
+          TAG: ${{ github.ref_name }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          version="${TAG#v}"
+          cat > notes.md <<EOF
+          ENVY BLACK VEIL ${version}: AlmaLinux 10 + KDE Plasma 6, themed end to end, private by default.
+
+          | Your computer | Download |
+          | --- | --- |
+          | Windows PC, Linux PC, Intel Mac | \`envy-black-veil-${version}-x86_64.iso\` |
+          | Apple Silicon Mac, ARM PC | \`envy-black-veil-${version}-aarch64.iso\` |
+
+          Try it in a VM with one command on Windows, macOS or Linux, or from a USB stick: [docs/try-it.md](https://github.com/xzchick/envy-black-veil/blob/${TAG}/docs/try-it.md).
+
+          Before you use it, check the download (and, with [cosign](https://docs.sigstore.dev/cosign/system_config/installation/), that it was built here):
+
+          \`\`\`sh
+          sha256sum -c SHA256SUMS.txt --ignore-missing      # macOS: shasum -a 256 -c SHA256SUMS.txt --ignore-missing
+          cosign verify-blob --bundle SHA256SUMS.txt.sigstore.json \\
+            --certificate-identity-regexp '^https://github.com/xzchick/envy-black-veil/' \\
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com SHA256SUMS.txt
+          \`\`\`
+
+          Every package in each image is listed in its \`.packages.txt\` and CycloneDX SBOM (\`.cdx.json\`). Before publishing, [this run](${RUN_URL}) booted both ISOs to the live desktop and checked them from the inside (SELinux, firewall, nothing listening or phoning home, the ENVY look); the x86_64 ISO was also booted with Secure Boot on, installed with LUKS2 encryption, and its installed system booted and checked.
+          EOF
+          cat notes.md
+
+      - name: Keep the dry-run output
+        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-dry-run
+          path: |
+            dist/SHA256SUMS.txt
+            dist/SHA256SUMS.txt.sigstore.json
+            dist/*.packages.txt
+            dist/*.cdx.json
+            notes.md
+
+      - name: Publish the release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ENVY BLACK VEIL ${{ github.ref_name }}
+          body_path: notes.md
+          files: dist/*

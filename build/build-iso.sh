@@ -8,8 +8,9 @@
 #      kickstart installs from,
 #   3. runs livemedia-creator --no-virt against kickstart/envy-black-veil.ks.
 #
-# It can't run on macOS or Windows: the OS is built on Linux. CI builds it in an
-# AlmaLinux 10 VM on every change (see .github/workflows/iso.yml).
+# The OS is built on Linux. On macOS (or any Linux with KVM), ci/build-in-vm.sh runs
+# this script in a throwaway AlmaLinux 10 VM, which is how CI builds every change
+# (see .github/workflows/iso.yml).
 #
 #   sudo dnf install -y epel-release
 #   sudo dnf install -y lorax lorax-templates-almalinux anaconda rpm-build \
@@ -77,7 +78,7 @@ say "Building the ENVY identity RPMs (theme, release + envy-tools)"
 rm -rf "$WORK"; mkdir -p "$WORK"/{SOURCES,SPECS,RPMS,BUILD,BUILDROOT,SRPMS}
 tar --transform "s,^,envy-black-veil-${VERSION}/," \
     -czf "$WORK/SOURCES/envy-black-veil-${VERSION}.tar.gz" -C "$HERE" \
-    theme tools LICENSE
+    theme tools privacy LICENSE
 rpmbuild --define "_topdir $WORK" -ba "$HERE/packaging/envy-black-veil.spec"
 
 say "Publishing the local package repo at $REPO_DIR"
@@ -92,6 +93,19 @@ if command -v getenforce >/dev/null && [ "$(getenforce)" = "Enforcing" ]; then
     say "Setting SELinux to permissive on this build host for the duration of the build"
     setenforce 0
 fi
+
+# A smaller ISO: xz-compressed squashfs with 1 MiB blocks (mksquashfs's default is
+# 128 KiB) plus the CPU's branch filter for programs, as Arch Linux's live ISO does.
+# A filter this mksquashfs doesn't have is left out.
+case "$ARCH" in x86_64) BCJ=x86 ;; aarch64) BCJ=arm64 ;; *) BCJ="" ;; esac
+probe="$(mktemp -d)"
+mkdir "$probe/empty"
+if [ -n "$BCJ" ] && ! mksquashfs "$probe/empty" "$probe/test.img" -comp xz -Xbcj "$BCJ" -noappend -quiet >/dev/null 2>&1; then
+    BCJ=""
+fi
+rm -rf "$probe"
+compress=(--compression xz "--compress-arg=-b 1M")
+[ -z "$BCJ" ] || compress+=("--compress-arg=-Xbcj $BCJ")
 
 rm -rf "$OUTDIR/result"            # livemedia-creator refuses an existing result dir
 mkdir -p "$OUTDIR/logs"
@@ -108,6 +122,7 @@ livemedia-creator \
     --resultdir "$OUTDIR/result" \
     --logfile "$OUTDIR/logs/livemedia.log" \
     --nomacboot \
+    "${compress[@]}" \
     "$@"
 
 ISO_PATH="$OUTDIR/result/$ISO_NAME"
@@ -116,6 +131,33 @@ ISO_PATH="$OUTDIR/result/$ISO_NAME"
 mv -f "$ISO_PATH" "$OUTDIR/$ISO_NAME"
 ( cd "$OUTDIR" && sha256sum "$ISO_NAME" > "${ISO_NAME}.sha256" )
 echo "$VOLID" > "$OUTDIR/${ISO_NAME}.volid"
+
+# --- 3. What's inside: package list and CycloneDX SBOM ------------------------
+# Read from the finished image's own RPM database, so they describe exactly what ships.
+say "Listing the image's packages (package list and CycloneDX SBOM)"
+inspect="$(mktemp -d)"
+mkdir -p "$inspect/iso" "$inspect/squash" "$inspect/ext"
+root=""
+if mount -o loop,ro "$OUTDIR/$ISO_NAME" "$inspect/iso" && mount -o loop,ro "$inspect/iso/LiveOS/squashfs.img" "$inspect/squash"; then
+    root="$inspect/squash"
+    # Older layouts wrap an ext4 image inside the squashfs.
+    if [ -f "$root/LiveOS/rootfs.img" ] && mount -o loop,ro "$root/LiveOS/rootfs.img" "$inspect/ext"; then
+        root="$inspect/ext"
+    fi
+fi
+base="${ISO_NAME%.iso}"
+if [ -n "$root" ] && rpm -qa --root "$root" --qf '%{NAME}-%{VERSION}-%{RELEASE}.%{ARCH}\n' | sort > "$OUTDIR/$base.packages.txt" \
+   && rpm -qa --root "$root" --qf '%{NAME}\t%{EPOCHNUM}\t%{VERSION}\t%{RELEASE}\t%{ARCH}\t%{LICENSE}\t%{VENDOR}\n' \
+        | python3 "$HERE/ci/sbom.py" --version "$VERSION" --arch "$ARCH" > "$OUTDIR/$base.cdx.json"; then
+    say "$(wc -l < "$OUTDIR/$base.packages.txt") packages: $OUTDIR/$base.packages.txt, $OUTDIR/$base.cdx.json"
+else
+    printf "\033[38;5;205mbuild-iso:\033[0m warning: couldn't list the image's packages\n" >&2
+    rm -f "$OUTDIR/$base.packages.txt" "$OUTDIR/$base.cdx.json"
+fi
+umount "$inspect/ext" 2>/dev/null || :
+umount "$inspect/squash" 2>/dev/null || :
+umount "$inspect/iso" 2>/dev/null || :
+rm -rf "$inspect"
 
 say "Done:"
 printf "   %s\n   %s\n" "$OUTDIR/$ISO_NAME" "$OUTDIR/${ISO_NAME}.sha256"

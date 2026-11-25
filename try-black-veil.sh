@@ -93,7 +93,7 @@ else
 fi
 
 if [ "$ARCH" = aarch64 ]; then
-    machine=(-machine virt)
+    machine=(-machine "virt,gic-version=max")          # GICv3 where available: more than 8 CPUs
     display_dev=(-device "virtio-gpu-pci,edid=on,xres=1600,yres=900")
     cdrom=(-drive "file=$ISO,if=none,id=cd0,media=cdrom,readonly=on" -device "virtio-scsi-pci,id=scsi0" -device "scsi-cd,drive=cd0")
 else

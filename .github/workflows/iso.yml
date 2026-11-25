@@ -1,9 +1,11 @@
 name: ISO
 
-# Build the ENVY BLACK VEIL live ISO in a throwaway AlmaLinux 10 VM (the way
-# AlmaLinux builds its own live media), then boot it in a VM and check it from
-# the inside: UEFI boot path, desktop, SELinux, firewall, nothing listening, and
-# the ENVY identity. Screenshots, logs and the ISO are kept as artifacts.
+# Build the ENVY BLACK VEIL live ISO for x86_64 and aarch64 (the way AlmaLinux
+# builds its own live media), then boot it in VMs and check it from the inside:
+# the UEFI boot path (on x86_64 also with Secure Boot on), the desktop, SELinux,
+# the firewall, nothing listening or phoning home, and the ENVY identity. On
+# x86_64 it then installs BLACK VEIL (LUKS2) and boots and checks the installed
+# disk. Screenshots, logs and the ISOs are kept as artifacts.
 
 on:
   push:
@@ -13,10 +15,14 @@ on:
       - packaging/**
       - theme/**
       - tools/**
+      - privacy/**
       - build/**
       - ci/**
+      - try-black-veil.sh
       - .github/workflows/iso.yml
   workflow_dispatch:
+  # The release workflow runs this first: only ISOs that pass every check are published.
+  workflow_call:
 
 permissions:
   contents: read
@@ -100,6 +106,8 @@ jobs:
           path: |
             ${{ env.WORK }}/out/envy-black-veil-*.iso
             ${{ env.WORK }}/out/envy-black-veil-*.iso.sha256
+            ${{ env.WORK }}/out/envy-black-veil-*.packages.txt
+            ${{ env.WORK }}/out/envy-black-veil-*.cdx.json
           retention-days: 14
           compression-level: 0
 
@@ -210,5 +218,7 @@ jobs:
           path: |
             ${{ env.WORK }}/out/envy-black-veil-*.iso
             ${{ env.WORK }}/out/envy-black-veil-*.iso.sha256
+            ${{ env.WORK }}/out/envy-black-veil-*.packages.txt
+            ${{ env.WORK }}/out/envy-black-veil-*.cdx.json
           retention-days: 14
           compression-level: 0
