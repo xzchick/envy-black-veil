@@ -1,0 +1,24 @@
+#!/usr/bin/bash
+# ENVY BLACK VEIL: name the boot menu's entries after the OS you installed.
+#
+# kernel-install runs this for every kernel it adds (at install time and on each
+# kernel update), after the boot loader entry has been written. It renames this
+# installation's entries from "AlmaLinux (<kernel>) 10.x (<codename>)" to
+# "ENVY BLACK VEIL (<kernel>) on AlmaLinux 10.x". Titles are only labels: GRUB
+# picks entries by their IDs. Installed by envy-black-veil-theme.
+
+COMMAND="${1:-}"
+[ "$COMMAND" = add ] || exit 0
+[ -n "${KERNEL_INSTALL_MACHINE_ID:-}" ] || exit 0
+OS_RELEASE="${OS_RELEASE:-/etc/os-release}"
+ENTRIES="${ENTRIES:-/boot/loader/entries}"
+[ -f "$OS_RELEASE" ] || exit 0
+# shellcheck disable=SC1090
+. "$OS_RELEASE"
+[ -n "${NAME:-}" ] || exit 0
+
+for entry in "$ENTRIES/${KERNEL_INSTALL_MACHINE_ID}"-*.conf; do
+    [ -f "$entry" ] || continue
+    sed -i -E "s/^title[[:space:]]+${NAME}[[:space:]]+(\([^)]*\)).*/title ENVY BLACK VEIL \1 on ${NAME} ${VERSION_ID:-}/" "$entry"
+done
+exit 0

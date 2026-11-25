@@ -26,6 +26,9 @@
 .EXAMPLE
     .\try-black-veil.ps1 -Remove    # delete the VM and its virtual disk
 
+.EXAMPLE
+    .\try-black-veil.ps1 .\envy-black-veil-0.1.0-x86_64.iso -NoStart   # set it up, start it later
+
 .NOTES
     If scripts are blocked:  powershell -ExecutionPolicy Bypass -File .\try-black-veil.ps1 <iso>
 #>
@@ -40,7 +43,9 @@ param(
     [int] $Cpus = 4,
     [ValidateRange(20, 4096)]
     [int64] $DiskGB = 40,
-    [switch] $Remove
+    [switch] $Remove,
+    # Create and configure the VM, but don't start it.
+    [switch] $NoStart
 )
 
 $ErrorActionPreference = 'Stop'
@@ -134,6 +139,10 @@ if ($Iso) {
     Write-Step 'Booting the installed system.'
 }
 
+if ($NoStart) {
+    Write-Step "The VM '$Name' is ready. Start it from Hyper-V Manager, or run this again without -NoStart."
+    exit 0
+}
 Start-VM -VM $vm
 Start-Process -FilePath vmconnect.exe -ArgumentList 'localhost', "`"$Name`""
 Write-Step "The VM's window is opening. Close it any time; stop the VM from Hyper-V Manager or with: Stop-VM -Name '$Name'"

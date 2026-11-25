@@ -17,7 +17,7 @@ jobs:
       - name: Install validators
         run: |
           sudo apt-get update
-          sudo apt-get install -y shellcheck desktop-file-utils libxml2-utils python3-yaml rpm librsvg2-bin grub-common fonts-dejavu-core
+          sudo apt-get install -y shellcheck desktop-file-utils libxml2-utils python3-yaml rpm librsvg2-bin grub-common fonts-dejavu-core genisoimage
           sudo pip install --break-system-packages pykickstart
 
       - name: Validate the kickstart
@@ -55,13 +55,30 @@ jobs:
           rpmbuild --nodeps --define "_topdir $PWD/.build" -bb packaging/envy-black-veil.spec
           for f in .build/RPMS/noarch/*.rpm; do echo "== $f"; rpm -qlp "$f"; done
 
+      - name: Make a tiny stand-in ISO for the Windows launcher test
+        run: |
+          mkdir -p iso-root && echo "stand-in for the BLACK VEIL ISO" > iso-root/README.txt
+          genisoimage -quiet -V ENVY-TEST -J -r -o envy-black-veil-0.1.0-x86_64.iso iso-root
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: test-iso
+          path: envy-black-veil-0.1.0-x86_64.iso
+          retention-days: 1
+
   windows-launcher:
-    # GitHub's Windows machines have no Hyper-V, so try-black-veil.ps1 can't start a VM
-    # here; it must still parse in Windows PowerShell 5.1 (what Windows ships), pass
-    # PSScriptAnalyzer, and stop with its own clear message rather than a stack trace.
+    # try-black-veil.ps1 on GitHub's Windows machine: it parses in Windows PowerShell 5.1
+    # (what Windows ships), passes PSScriptAnalyzer, explains itself when it can't go on,
+    # and really creates the Hyper-V VM (Hyper-V management works there, though no VM
+    # can start without nested virtualization), which is then checked and removed.
+    needs: validate
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: test-iso
 
       - name: Parse try-black-veil.ps1 in Windows PowerShell 5.1
         shell: powershell
@@ -89,3 +106,41 @@ jobs:
             Write-Host "expected try-black-veil's own message and exit 1, got exit $rc"
             exit 1
           }
+          exit 0
+
+      - name: Creates the Hyper-V VM the way BLACK VEIL needs it, then removes it
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $name = 'ENVY BLACK VEIL CI'
+          $iso = (Resolve-Path .\envy-black-veil-0.1.0-x86_64.iso).Path
+          & powershell -NoProfile -ExecutionPolicy Bypass -File .\try-black-veil.ps1 $iso -Name $name -NoStart
+          if ($LASTEXITCODE -ne 0) { throw "try-black-veil.ps1 -NoStart exited $LASTEXITCODE" }
+
+          $vm = Get-VM -Name $name
+          $fw = Get-VMFirmware -VM $vm
+          $dvd = Get-VMDvdDrive -VM $vm | Select-Object -First 1
+          $disk = Get-VMHardDiskDrive -VM $vm | Select-Object -First 1
+          $vhd = Get-VHD -Path $disk.Path
+          $checks = [ordered]@{
+            'Generation 2 (UEFI)'                        = $vm.Generation -eq 2
+            '4 CPUs'                                     = $vm.ProcessorCount -eq 4
+            '6 GB of RAM, not dynamic'                   = ($vm.MemoryStartup -eq 6GB) -and (-not $vm.DynamicMemoryEnabled)
+            'Secure Boot on'                             = "$($fw.SecureBoot)" -eq 'On'
+            'Microsoft UEFI CA template (AlmaLinux shim)' = $fw.SecureBootTemplate -eq 'MicrosoftUEFICertificateAuthority'
+            'the ISO in the DVD drive'                   = $dvd.Path -eq $iso
+            'boots from the DVD first'                   = $fw.BootOrder[0].Device.Path -eq $iso
+            '40 GB disk that grows as used'              = ($vhd.Size -eq 40GB) -and ("$($vhd.VhdType)" -eq 'Dynamic')
+          }
+          $failed = 0
+          foreach ($c in $checks.GetEnumerator()) {
+            Write-Host ("{0}  {1}" -f $(if ($c.Value) { 'PASS' } else { 'FAIL' }), $c.Key)
+            if (-not $c.Value) { $failed++ }
+          }
+
+          & powershell -NoProfile -ExecutionPolicy Bypass -File .\try-black-veil.ps1 -Name $name -Remove
+          if ($LASTEXITCODE -ne 0) { throw "try-black-veil.ps1 -Remove exited $LASTEXITCODE" }
+          if (Get-VM -Name $name -ErrorAction SilentlyContinue) { throw 'the VM is still there after -Remove' }
+          if (Test-Path -LiteralPath $disk.Path) { throw 'the virtual disk is still there after -Remove' }
+          Write-Host 'PASS  -Remove deletes the VM and its disk'
+          if ($failed) { throw "$failed check(s) failed" }

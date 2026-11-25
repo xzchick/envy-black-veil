@@ -1,0 +1,50 @@
+#! /usr/bin/sh
+# Variables come from grub2-mkconfig and its library.
+# shellcheck disable=SC2034,SC2154
+set -e
+
+# ENVY BLACK VEIL: the themed boot menu.
+#
+# grub2-mkconfig runs this right after 00_header, so every grub.cfg it writes
+# (the installer's and any later one) shows the ENVY GRUB theme on screen,
+# without touching /etc/default/grub. On a system with a serial console the menu
+# stays readable there as plain text. Installed by envy-black-veil-theme.
+
+prefix="/usr"
+exec_prefix="/usr"
+datarootdir="/usr/share"
+
+. "$pkgdatadir/grub-mkconfig_lib"
+
+theme=/boot/grub2/themes/envy-black-veil/theme.txt
+if [ ! -f "$theme" ] || ! is_path_readable_by_grub "$theme"; then
+    exit 0
+fi
+# Already themed the standard way (GRUB_THEME with GRUB_TERMINAL_OUTPUT=gfxterm)?
+case "x${GRUB_TERMINAL_OUTPUT}" in
+    *gfxterm*) [ -n "${GRUB_THEME}" ] && exit 0 ;;
+esac
+
+outputs=gfxterm
+case "x${GRUB_TERMINAL} ${GRUB_TERMINAL_OUTPUT}" in
+    *serial*) outputs="gfxterm serial" ;;
+esac
+
+gettext_printf "Found ENVY BLACK VEIL theme: %s\n" "$theme" >&2
+echo "### ENVY BLACK VEIL boot menu ###"
+echo "set envy_saved_root=\"\$root\""
+prepare_grub_to_access_device "$(${grub_probe} --target=device "$theme")"
+echo "insmod all_video"
+echo "insmod gfxterm"
+echo "insmod gfxmenu"
+echo "insmod png"
+for font in "$(dirname "$theme")"/*.pf2; do
+    if [ -f "$font" ]; then
+        echo "loadfont (\$root)$(make_system_path_relative_to_its_root "$font")"
+    fi
+done
+echo "if [ x\$gfxmode = x ]; then set gfxmode=auto; fi"
+echo "terminal_output ${outputs}"
+echo "set theme=(\$root)$(make_system_path_relative_to_its_root "$theme")"
+echo "export theme"
+echo "set root=\"\$envy_saved_root\""

@@ -100,6 +100,7 @@ def hardware_accel() -> str | None:
 
 
 ACCEL = "tcg"                            # set in main(): kvm, hvf, or tcg (emulated)
+SLOW = 1                                 # set in main(): emulated VMs get every wait stretched
 
 # The throwaway identity of the CI install (never used outside these VMs).
 TEST_USER = "envytest"
@@ -122,6 +123,7 @@ network --hostname=black-veil
 rootpw --lock
 user --name={TEST_USER} --groups=wheel --password={TEST_PASSWORD} --plaintext
 firstboot --disable
+xconfig --startxonboot
 shutdown
 ignoredisk --only-use=vda
 zerombr
@@ -198,7 +200,7 @@ def secure_boot_firmware(vars_copy: Path) -> list[str] | None:
 
 def secure_boot_checks(res: Results, prefix: str, sudo: str) -> None:
     res.check(f"{prefix}Secure Boot is on",
-              "od -An -tu1 /sys/firmware/efi/efivars/SecureBoot-8be4df61-93ca-11d2-aa0d-e0f6e2c33c69 | awk '{print $NF}'",
+              "od -An -tu1 /sys/firmware/efi/efivars/SecureBoot-8be4df61-93ca-11d2-aa0d-00e098032b8c | awk '{print $NF}'",
               ok=lambda rc, o: o == "1")
     res.check(f"{prefix}kernel lockdown (Secure Boot's protection of the running kernel)",
               "cat /sys/kernel/security/lockdown", ok=lambda rc, o: "[integrity]" in o or "[confidentiality]" in o)
@@ -373,7 +375,7 @@ class Serial:
         tag = f"ENVYRC{self.count}X"
         self.buf = ""
         self.send(f"{command}; echo {tag}=$?\n")
-        deadline = time.monotonic() + timeout
+        deadline = time.monotonic() + timeout * SLOW
         rx = re.compile(rf"{tag}=(\d+)")
         while time.monotonic() < deadline:
             m = rx.search(self.buf)
@@ -387,16 +389,17 @@ class Serial:
 
     def login(self, user: str, password: str, first_timeout: float) -> bool:
         for attempt in range(12):
-            if not self.expect(r"login:\s*$", first_timeout if attempt == 0 else 90):
+            if not self.expect(r"login:\s*$", first_timeout if attempt == 0 else 90 * SLOW):
                 return False
             self.send(user + "\n")
-            m = self.expect(r"(Password:\s*$|\$\s*$|Login incorrect)", 30)
+            m = self.expect(r"(Password:\s*$|\$\s*$|Login incorrect)", 30 * SLOW)
             if m and m.group(1).startswith("Password"):
                 self.send(password + "\n")
-                m = self.expect(r"(\$\s*$|Login incorrect)", 30)
+                m = self.expect(r"(\$\s*$|Login incorrect)", 30 * SLOW)
             if m and "$" in m.group(1):
                 self.send("export PS1='$ ' TERM=dumb; stty -echo; unset PROMPT_COMMAND\n")
-                self.expect(r"\$\s*$", 10)
+                self.expect(r"\$\s*$", 10 * SLOW)
+                self.run("true", 30)                     # soak up the rest of the echo
                 return True
             time.sleep(5)                                # e.g. livesys still creating the user
         return False
@@ -611,9 +614,10 @@ def install_to_disk(res: Results, args, out: Path) -> bool:
            " ANACONDA_PRODUCTVERSION=\"$(sed -r -e 's/^.* ([0-9.]+).*$/\\1/' /etc/system-release)\""
            " ANACONDA_ISFINAL=true")
     # In live mode Anaconda ignores --kickstart and parses its interactive defaults,
-    # /usr/share/anaconda/interactive-defaults.ks, instead; in this throwaway live VM the
-    # test's kickstart takes that file's place, and AUTOMATED_ANACONDA runs it unattended.
-    con.run("{ ( " + SUDO + " " + env + " sh -c 'cp /tmp/envy-install.ks /usr/share/anaconda/interactive-defaults.ks;"
+    # /usr/share/anaconda/interactive-defaults.ks, instead (BLACK VEIL's own defaults
+    # are in there); in this throwaway live VM the test's kickstart is added to them,
+    # and AUTOMATED_ANACONDA runs the result unattended.
+    con.run("{ ( " + SUDO + " " + env + " sh -c 'cat /tmp/envy-install.ks >> /usr/share/anaconda/interactive-defaults.ks;"
             " setenforce 0; python3 /tmp/envy-anaconda.py --liveinst --cmdline"
             " > /tmp/envy-install.log 2>&1; echo $? > /tmp/envy-install.rc; setenforce 1' ) > /dev/null 2>&1 & }", 30)
     started, last, status = time.monotonic(), "", None
@@ -762,8 +766,11 @@ def boot_installed(args, out: Path, res: Results, disk: Path, secure: bool = Fal
         res.check("installed: ENVY boot splash is the default", "plymouth-set-default-theme",
                   ok=lambda rc, o: o == "envy-black-veil")
         res.check("installed: ENVY GRUB menu switched on",
-                  "grep -E '^GRUB_(THEME|TERMINAL_OUTPUT)=' /etc/default/grub; " + s + " grep -c 'envy-black-veil' /boot/grub2/grub.cfg",
+                  f"{s} grep -E '^(terminal_output|set theme=).*' /boot/grub2/grub.cfg",
                   ok=lambda rc, o: "envy-black-veil/theme.txt" in o and "gfxterm" in o)
+        res.check("installed: boot menu entries named ENVY BLACK VEIL",
+                  f"{s} sh -c \"grep -h '^title' /boot/loader/entries/*.conf\"",
+                  ok=lambda rc, o: bool(o) and all("ENVY BLACK VEIL" in line for line in o.splitlines()))
         for name, command, ok, required in no_network_listeners("installed: ", s) + no_phone_home("installed: ", s):
             res.check(name, command, ok=ok, required=required)
         res.check("installed: ENVY packages", "rpm -q envy-black-veil-theme envy-black-veil-release")
@@ -817,13 +824,13 @@ def main() -> int:
     ap.add_argument("--arch", choices=sorted(PLATFORMS),
                     default=HOST_ARCH if HOST_ARCH in PLATFORMS else "x86_64")
     args = ap.parse_args()
-    global PLATFORM, ACCEL
+    global PLATFORM, ACCEL, SLOW
     PLATFORM = PLATFORMS[args.arch]
     # Hardware virtualization runs only the computer's own architecture. Without it
     # the VM is emulated (several times slower): stretch the waits, and skip the
     # install, which would take hours.
     ACCEL = (hardware_accel() if args.arch == HOST_ARCH else None) or "tcg"
-    args.slow = 6 if ACCEL == "tcg" else 1
+    args.slow = SLOW = 6 if ACCEL == "tcg" else 1
     print(f"{args.arch} VMs, " + {"kvm": "KVM", "hvf": "Hypervisor framework"}.get(
         ACCEL, f"emulated (no hardware virtualization for {args.arch} here)"), flush=True)
     if args.install and ACCEL == "tcg":

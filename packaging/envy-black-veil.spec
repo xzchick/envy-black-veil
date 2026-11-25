@@ -88,9 +88,11 @@ install -Dm644 theme/grub/envy-black-veil/theme.txt       %{buildroot}/boot/grub
 install -Dm644 theme/grub/envy-black-veil/background.png   %{buildroot}/boot/grub2/themes/envy-black-veil/background.png
 install -m644 grub-*.pf2 %{buildroot}/boot/grub2/themes/envy-black-veil/
 
-# Switch the themed GRUB menu on in installed systems (Anaconda post-install hook)
-install -Dm644 theme/anaconda/95-envy-black-veil-grub.ks \
-    %{buildroot}%{_datadir}/anaconda/post-scripts/95-envy-black-veil-grub.ks
+# The themed GRUB menu on installed systems: grub2-mkconfig (run by the installer and
+# afterwards) picks this up; and ENVY BLACK VEIL names on the boot menu's entries.
+install -Dm755 theme/grub/grub.d/05_envy_black_veil %{buildroot}%{_sysconfdir}/grub.d/05_envy_black_veil
+install -Dm755 theme/kernel/96-envy-black-veil-title.install \
+    %{buildroot}%{_prefix}/lib/kernel/install.d/96-envy-black-veil-title.install
 
 # Wallpaper
 install -Dm644 wallpaper-2560x1440.png %{buildroot}%{_datadir}/wallpapers/EnvyBlackVeil/contents/images/2560x1440.png
@@ -129,7 +131,8 @@ fi
 /boot/grub2/themes/envy-black-veil/
 %{_datadir}/wallpapers/EnvyBlackVeil/
 %{_datadir}/plasma/shells/org.kde.plasma.desktop/contents/updates/envy-black-veil-wallpaper.js
-%{_datadir}/anaconda/post-scripts/95-envy-black-veil-grub.ks
+%{_sysconfdir}/grub.d/05_envy_black_veil
+%{_prefix}/lib/kernel/install.d/96-envy-black-veil-title.install
 %{_sysconfdir}/skel/.config/kdeglobals
 %{_sysconfdir}/skel/.config/konsolerc
 
@@ -145,6 +148,9 @@ fi
 
 %changelog
 * Wed Nov 25 2026 Envy <235594225+xzchick@users.noreply.github.com> - 0.1.0-3
+- The ENVY GRUB menu on installed systems now comes from /etc/grub.d (Anaconda 40
+  no longer runs /usr/share/anaconda/post-scripts), and boot entries are named
+  ENVY BLACK VEIL by a kernel-install hook.
 - Privacy defaults in the release package: no NetworkManager connectivity check, no
   installer geolocation lookup, and Firefox policies with telemetry, studies, Pocket
   and sponsored content off.

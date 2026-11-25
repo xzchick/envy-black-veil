@@ -181,6 +181,15 @@ done
 systemctl disable fwupd-refresh.timer 2>/dev/null || :
 sed -i 's/^countme=1/countme=0/' /etc/yum.repos.d/*.repo
 
+# The installer keeps this image's firewall (on, nothing open) on the installed
+# system; otherwise Anaconda opens SSH on every install. (Interactive installs read
+# these defaults; the installer's other choices are the user's.)
+cat >> /usr/share/anaconda/interactive-defaults.ks << 'EOF'
+
+# ENVY BLACK VEIL: keep the firewall as the image ships it (on, nothing open).
+firewall --use-system-defaults
+EOF
+
 # The ENVY boot splash and login screen
 plymouth-set-default-theme envy-black-veil
 install -d -m 0755 /etc/sddm.conf.d

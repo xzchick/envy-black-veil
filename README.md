@@ -31,11 +31,16 @@
 On **Windows, macOS or Linux** — in a virtual machine (nothing on your computer changes) or from a USB stick:
 
 ```sh
-./try-black-veil.sh envy-black-veil-0.1.0-x86_64.iso     # macOS (Intel) or Linux, with QEMU
-./try-black-veil.sh envy-black-veil-0.1.0-aarch64.iso    # Apple Silicon Mac, once the ARM build is up
+./try-black-veil.sh envy-black-veil-0.1.0-aarch64.iso    # Apple Silicon Mac (brew install qemu)
+./try-black-veil.sh envy-black-veil-0.1.0-x86_64.iso     # Linux or Intel Mac, with QEMU
 ```
 
-Step by step for **UTM, Parallels, VMware, Hyper-V, VirtualBox, GNOME Boxes and virt-manager**, plus USB sticks: **[docs/try-it.md](docs/try-it.md)**. The ISO comes from the latest green [ISO workflow run](https://github.com/xzchick/envy-black-veil/actions/workflows/iso.yml) (its *envy-black-veil-iso* artifact, with a SHA-256 file); a signed release download is on the roadmap.
+```powershell
+# Windows 10/11 Pro with Hyper-V, from an administrator PowerShell
+powershell -ExecutionPolicy Bypass -File .\try-black-veil.ps1 .\envy-black-veil-0.1.0-x86_64.iso
+```
+
+Each sets up a VM the way BLACK VEIL needs it (UEFI, 6 GB, 4 CPUs, a 40 GB disk to install onto; on Hyper-V, Secure Boot with the Microsoft UEFI CA template) and boots the live desktop. Step by step for **UTM, Parallels, VMware, VirtualBox, GNOME Boxes and virt-manager**, plus USB sticks: **[docs/try-it.md](docs/try-it.md)**. The ISOs come from the latest green [ISO workflow run](https://github.com/xzchick/envy-black-veil/actions/workflows/iso.yml) (its *envy-black-veil-iso* artifacts, each with a SHA-256 file, a package list and an SBOM).
 
 ---
 
@@ -95,9 +100,11 @@ CYAN #35e8ff   LAVENDER #ac8cff   VIOLET #8547e8   GREEN #49e3a6
 
 ## Encrypted & offline by design
 
-- **SELinux enforcing**, the **firewall on with nothing open**, and **nothing listening on the network** — checked by CI on every build. SSH, printing (CUPS), network discovery (Avahi), the Cockpit web console and KDE Connect are off or left out; turn on only what you need.
-- **Full-disk LUKS encryption** offered in the installer — the ENVY boot splash prompts for the passphrase.
-- No telemetry, no accounts, no phone-home. Every ENVY app except Recon and Tunnel works with **no network** at all.
+- **SELinux enforcing**, the **firewall on with nothing open**, and **nothing listening on the network**, on the live system and on what you install. SSH, printing (CUPS) and network discovery (Avahi) are off; the Cockpit web console, Samba file sharing, KDE Connect and KDE's remote-desktop servers (VNC, RDP) aren't installed. Turn on only what you need.
+- **Nothing phones home.** No connectivity check (NetworkManager would fetch a vendor's test page every few minutes), no firmware or DNF "countme" pings on a timer, no location lookup in the installer, and Firefox ships with telemetry, studies and sponsored content off. Updates are still there when you ask: `sudo dnf upgrade`, `fwupdmgr refresh`. See [`privacy/`](privacy).
+- **Full-disk LUKS2 encryption** in the installer; the ENVY boot splash asks for the passphrase.
+- No accounts. Every ENVY app except Recon and Tunnel works with **no network** at all.
+- CI checks every one of these on every build, live and installed.
 
 ---
 
@@ -113,7 +120,15 @@ Short version: write the ISO to a USB stick, boot it, run **Install ENVY BLACK V
 
 ## Build it
 
-The OS is built the way AlmaLinux builds its own live media, on an AlmaLinux 10 machine or VM (x86_64 or aarch64):
+One command from **macOS or Linux** builds it in a throwaway AlmaLinux 10 VM, exactly as CI does (an Apple Silicon Mac builds the aarch64 ISO in about 10 minutes):
+
+```sh
+git clone https://github.com/xzchick/envy-black-veil.git && cd envy-black-veil
+./ci/build-in-vm.sh                 # macOS: brew install qemu   -> output/envy-black-veil-0.1.0-<arch>.iso
+python3 ci/boot-test.py --install --iso output/envy-black-veil-0.1.0-*.iso --out test/   # every CI check, locally
+```
+
+Or directly on an AlmaLinux 10 machine or VM (x86_64 or aarch64), the way AlmaLinux builds its own live media:
 
 ```sh
 sudo dnf install -y epel-release
@@ -134,11 +149,13 @@ sudo ./build/build-iso.sh          # -> output/envy-black-veil-0.1.0-<arch>.iso
 | :--- | :--- |
 | Live-ISO definition | [`kickstart/envy-black-veil.ks`](kickstart/envy-black-veil.ks) |
 | ENVY theme (Plasma, SDDM, Plymouth, GRUB, Konsole, wallpaper) | [`theme/`](theme) |
-| Identity RPMs (theme, release file, Anaconda GRUB hook) | [`packaging/envy-black-veil.spec`](packaging/envy-black-veil.spec) |
+| Identity RPMs (theme, boot menu and entry names, release file, privacy defaults) | [`packaging/envy-black-veil.spec`](packaging/envy-black-veil.spec) |
+| Privacy defaults (NetworkManager, Firefox, installer) | [`privacy/`](privacy) |
 | `envy-tools` on-demand app installer | [`tools/envy-tools`](tools/envy-tools) |
 | ISO build script + Makefile | [`build/build-iso.sh`](build/build-iso.sh) |
-| CI: build in a VM, boot and check the ISO | [`ci/`](ci) · [ISO workflow](.github/workflows/iso.yml) |
-| Try it in a VM with one command (macOS, Linux) | [`try-black-veil.sh`](try-black-veil.sh) |
+| CI: build in a VM, boot, install and check the ISO; package list and SBOM | [`ci/`](ci) · [ISO workflow](.github/workflows/iso.yml) |
+| Signed releases (ISOs that passed every check, signed checksums, SBOMs) | [Release workflow](.github/workflows/release.yml) |
+| Try it in a VM with one command (macOS, Linux · Windows Hyper-V) | [`try-black-veil.sh`](try-black-veil.sh) · [`try-black-veil.ps1`](try-black-veil.ps1) |
 | Docs (try it, external drive, building, customizing) | [`docs/`](docs) |
 
 ---
