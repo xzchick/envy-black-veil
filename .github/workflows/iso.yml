@@ -87,6 +87,7 @@ jobs:
             ${{ env.WORK }}/test/install-logs.txt
             ${{ env.WORK }}/test/results.json
             ${{ env.WORK }}/test/summary.md
+            ${{ env.WORK }}/test/hardware-report-*.md
           if-no-files-found: ignore
 
       - name: Keep the build logs
@@ -203,6 +204,7 @@ jobs:
             ${{ env.WORK }}/test/install-logs.txt
             ${{ env.WORK }}/test/results.json
             ${{ env.WORK }}/test/summary.md
+            ${{ env.WORK }}/test/hardware-report-*.md
           if-no-files-found: ignore
 
       - name: Keep the build logs
