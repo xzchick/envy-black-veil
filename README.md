@@ -116,7 +116,7 @@ CYAN #35e8ff   LAVENDER #ac8cff   VIOLET #8547e8   GREEN #49e3a6
 ## Encrypted & offline by design
 
 - **SELinux enforcing**, the **firewall on with nothing open**, and **nothing listening on the network**, on the live system and on what you install. SSH, printing (CUPS) and network discovery (Avahi) are off; the Cockpit web console, Samba file sharing, KDE Connect and KDE's remote-desktop servers (VNC, RDP) aren't installed. Turn on only what you need.
-- **Nothing phones home.** No connectivity check (NetworkManager would fetch a vendor's test page every few minutes), no firmware or DNF "countme" pings on a timer, no location lookup in the installer, and Firefox ships with telemetry, studies and sponsored content off. Updates are still there when you ask: `sudo dnf upgrade`, `fwupdmgr refresh`. See [`privacy/`](privacy).
+- **Nothing phones home.** No connectivity check (NetworkManager would fetch a vendor's test page every few minutes), no firmware or DNF "countme" pings on a timer, no location lookup in the installer, and Firefox ships with telemetry, studies and sponsored content off. Updates are still there when you ask: `sudo dnf upgrade` (AlmaLinux's, and BLACK VEIL's own from its [signed package repository](https://xzchick.github.io/envy-black-veil/)), `fwupdmgr refresh`. See [`privacy/`](privacy).
 - **Full-disk LUKS2 encryption** in the installer; the ENVY boot splash asks for the passphrase.
 - No accounts. Every ENVY app except Recon and Tunnel works with **no network** at all.
 - CI checks every one of these on every build, live and installed.
@@ -176,6 +176,7 @@ sudo ./build/build-iso.sh          # -> output/envy-black-veil-0.1.0-<arch>.iso
 | ISO build script + Makefile | [`build/build-iso.sh`](build/build-iso.sh) |
 | CI: build in a VM, boot, install and check the ISO; package list and SBOM | [`ci/`](ci) · [ISO workflow](.github/workflows/iso.yml) |
 | Signed releases (ISOs that passed every check, signed checksums, SBOMs) | [Release workflow](.github/workflows/release.yml) |
+| Signed package repository on GitHub Pages (built, signed, published, then installed from) | [`repo/`](repo) · [package-repo workflow](.github/workflows/repo.yml) · [the repository](https://xzchick.github.io/envy-black-veil/) |
 | Try it in a VM with one command (macOS, Linux · Windows Hyper-V) | [`try-black-veil.sh`](try-black-veil.sh) · [`try-black-veil.ps1`](try-black-veil.ps1) |
 | Docs (try it, external drive, building, customizing) | [`docs/`](docs) |
 
@@ -191,6 +192,11 @@ sudo ./build/build-iso.sh          # -> output/envy-black-veil-0.1.0-<arch>.iso
 - [x] A published, verified ISO release: [v0.1.0](https://github.com/xzchick/envy-black-veil/releases/tag/v0.1.0), with Sigstore-signed checksums, package lists and SBOMs. The [release workflow](.github/workflows/release.yml) publishes only ISOs that pass every check.
 - [x] Keep changes on a USB stick: the boot menu's *keep changes* entry turns a stick's free space into storage on first use. CI writes the ISO to a virtual stick, boots it twice and checks that changes survive. Both ISOs now boot from USB through their own EFI partition. (In builds from the ISO workflow now, and the next release.)
 - [ ] Acceptance on real hardware. Ready for it: the **Hardware Report** app (`envy-hardware-report`) and a [hardware report form](https://github.com/xzchick/envy-black-veil/issues/new?template=hardware-report.yml).
-- [ ] Signed packages and a hosted update repo, and with it BLACK VEIL's own release identity (os-release), which needs that repo to stay in step with AlmaLinux's updates.
+- [x] Signed packages and a hosted update repository: [xzchick.github.io/envy-black-veil](https://xzchick.github.io/envy-black-veil/).
+  - Every package is signed with the project's key (RSA 4096, `3F39 076E 0B4B 41F4 23CA 374A B1DD ECDE 888D A680`), and so is the metadata.
+  - BLACK VEIL's release package points `dnf` at it, so `dnf upgrade` updates the ENVY packages too.
+  - Every publication is installed from by a fresh AlmaLinux 10 with signature checks on.
+  - On 0.1.0, add it with `sudo dnf config-manager --add-repo https://xzchick.github.io/envy-black-veil/envy-black-veil.repo`.
+- [ ] BLACK VEIL's own release identity (os-release), kept in step with AlmaLinux's updates through that repository.
 
 <p align="center"><sub>MIT licensed. Created by <a href="https://github.com/xzchick">Envy (@xzchick)</a>. Built on AlmaLinux and KDE; the ENVY identity, theme and tooling are my own.</sub></p>

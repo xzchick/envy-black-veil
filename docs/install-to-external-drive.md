@@ -152,6 +152,13 @@ envy-tools install all                # the whole suite
 
 Each tool installs into one isolated environment and appears in the KDE menu, and runs fully offline after that. The standalone [ENVY Tools](https://github.com/xzchick/envy-tools) app installs each app's signed release build too. See [customizing.md](customizing.md).
 
+**Updates:** `sudo dnf upgrade` updates AlmaLinux and BLACK VEIL's own packages together. BLACK VEIL's come from its [signed package repository](https://xzchick.github.io/envy-black-veil/). BLACK VEIL 0.1.0 came out before that repository existed, so on 0.1.0 add it once:
+
+```sh
+sudo dnf config-manager --add-repo https://xzchick.github.io/envy-black-veil/envy-black-veil.repo
+sudo dnf upgrade      # shows the key's fingerprint first: 3F39 076E 0B4B 41F4 23CA 374A B1DD ECDE 888D A680
+```
+
 ---
 
 ## Tell us how it went

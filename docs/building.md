@@ -67,13 +67,28 @@ Every change to the OS (kickstart, packaging, theme, build or CI scripts) runs t
 
 The screenshots, the results and the ISOs are kept as workflow artifacts (the ISOs for 14 days). `ci/boot-test.py` runs on Linux and macOS alike: `python3 ci/boot-test.py --install --iso output/envy-black-veil-0.1.0-<arch>.iso --out test/`.
 
+## The package repository
+
+BLACK VEIL's own packages are published as a signed `dnf` repository on GitHub Pages: [xzchick.github.io/envy-black-veil](https://xzchick.github.io/envy-black-veil/). The packages are `envy-black-veil-theme`, `-release` and `-live`. The release package points installed systems at the repository, so `dnf upgrade` updates them along with AlmaLinux.
+
+- **Publishing.** The [package-repo workflow](../.github/workflows/repo.yml) runs [`repo/publish.sh`](../repo/publish.sh) in AlmaLinux 10 whenever the packages' sources change.
+  - It builds the packages and signs each one with the project's key (the `RPM_SIGNING_KEY` secret). It refuses a key that isn't the one in [`repo/`](../repo).
+  - It checks every signature with `rpm`, using nothing but the public key.
+  - It writes the repository with a signed `repomd.xml`, and deploys it to Pages.
+- **Checking.** A fresh AlmaLinux 10 then adds the published repository the way a person would.
+  - It installs from it with signature checks on, and confirms the key `dnf` imported is this repository's.
+  - It checks every package's signature, and refreshes the metadata with `repo_gpgcheck=1`.
+- **Updating.** An update reaches installed systems only when the spec's version or release goes up.
+- **The key** is RSA 4096, fingerprint `3F39 076E 0B4B 41F4 23CA  374A B1DD ECDE 888D A680`.
+
 ## Just the theme packages
 
 To build only the identity RPMs (for testing on an existing AlmaLinux 10 + KDE box):
 
 ```sh
+v=$(awk '/^Version:/ {print $2}' packaging/envy-black-veil.spec)
 mkdir -p .build/SOURCES
-tar --transform "s,^,envy-black-veil-0.1.0/," -czf .build/SOURCES/envy-black-veil-0.1.0.tar.gz theme tools privacy LICENSE
+tar --transform "s,^,envy-black-veil-$v/," -czf ".build/SOURCES/envy-black-veil-$v.tar.gz" theme tools privacy live repo LICENSE
 rpmbuild --define "_topdir $PWD/.build" -ba packaging/envy-black-veil.spec
 ```
 
@@ -97,5 +112,6 @@ CI runs this, plus a test build of the identity RPMs, on every push.
 - A leaner set than the stock KDE spin, so the ISO is a single download under 2 GiB: no KDE wallpaper collection, Akonadi/MariaDB, legacy printer-driver database or `/usr/share/doc`.
 - **Keep changes on a USB stick**: the live boot menu's *keep changes* entry, and a small dracut module ([`live/`](../live), package `envy-black-veil-live`) that turns a stick's free space into storage on first use. [`build/lorax-templates.py`](../build/lorax-templates.py) adds the entry to lorax's boot menus, and gives the aarch64 ISO the same USB layout as x86_64 (a GPT with its EFI system partition).
 - The **Hardware Report** ([`tools/envy-hardware-report`](../tools/envy-hardware-report)): this computer's hardware, drivers and firmware problems, as a file to share without anything that identifies you.
+- BLACK VEIL's **signed package repository** and its key (above), so its own packages update with `dnf upgrade`; the image trusts the key from the start.
 - AlmaLinux's own release package stays in place, so `dnf`, the repositories and updates work exactly as on AlmaLinux 10; BLACK VEIL marks itself with `/etc/envy-black-veil-release`.
 - **No ENVY applications.** They're added on the installed system with `envy-tools`.
