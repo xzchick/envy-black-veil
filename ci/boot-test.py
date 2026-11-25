@@ -283,6 +283,22 @@ def passphrase_box_visible(png: Path) -> bool:
     return False
 
 
+def grub_theme_visible(png: Path) -> bool:
+    """The ENVY GRUB theme on screen: its pink countdown bar near the bottom."""
+    try:
+        width, height, bpp, rows = png_rows(png)
+    except (OSError, ValueError, zlib.error, struct.error):
+        return False
+    for y in range(int(height * 0.8), height):
+        run = 0
+        for x in range(width):
+            r, g, b = rows[y][x * bpp:x * bpp + 3]
+            run = run + 1 if (r > 220 and g < 120 and b > 140) else 0
+            if run >= 120:
+                return True
+    return False
+
+
 def connect_unix(path: Path, timeout=30.0) -> socket.socket:
     deadline = time.monotonic() + timeout
     while True:
@@ -764,6 +780,10 @@ def boot_installed(args, out: Path, res: Results, disk: Path, secure: bool = Fal
             if t >= next_shot and next_shot < 120:
                 qmp.screenshot(out / f"{name}-{int(t):03d}s.png")
                 next_shot += 2.5 if not secure else 10
+        if not secure:
+            menus = [p for p in sorted(out.glob(f"{name}-*.png")) if grub_theme_visible(p)]
+            res.record(f"{pre}the ENVY GRUB menu is on screen", bool(menus),
+                       f"in {menus[0].name}" if menus else f"no themed menu in the {name}-*.png screenshots")
         res.record(f"{pre}boots to the ENVY splash, which asks for the disk passphrase", asked,
                    f"splash after {int(time.monotonic() - start)}s" if asked else "the boot splash never started (see the boot screenshots)")
         if not asked:
