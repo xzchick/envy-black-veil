@@ -1,29 +1,35 @@
 #!/usr/bin/env bash
 # build-iso.sh — build the ENVY BLACK VEIL live ISO.
 #
-# Runs on an AlmaLinux 10 / RHEL 10 / Fedora host (it uses lorax's
-# livemedia-creator, rpmbuild and createrepo_c). It:
-#   1. builds the ENVY identity RPMs (theme, release, calamares branding),
-#   2. puts them in a local repo the kickstart installs from,
-#   3. runs livemedia-creator against kickstart/envy-black-veil.ks.
+# Runs as root on an AlmaLinux 10 x86_64 host or VM (the way AlmaLinux builds its
+# own live media). It:
+#   1. builds the ENVY identity RPMs (theme, release + envy-tools),
+#   2. publishes them as a local repo at /srv/envy-black-veil/repo, which the
+#      kickstart installs from,
+#   3. runs livemedia-creator --no-virt against kickstart/envy-black-veil.ks.
 #
-# This CANNOT run on macOS or Windows — the OS is built on Linux. Everything in
-# this repository is the real build system; only the final .iso is produced here.
+# It can't run on macOS or Windows: the OS is built on Linux. CI builds it in an
+# AlmaLinux 10 VM on every change (see .github/workflows/iso.yml).
 #
+#   sudo dnf install -y epel-release
+#   sudo dnf install -y lorax lorax-templates-almalinux anaconda rpm-build \
+#        createrepo_c pykickstart librsvg2-tools
 #   sudo ./build/build-iso.sh
 #
-# Env overrides: VERSION, ARCH, RELEASEVER, OUTDIR, ISO_NAME.
+# Env overrides: VERSION, ARCH, RELEASEVER, OUTDIR, ISO_NAME, VOLID.
 set -euo pipefail
 
 VERSION="${VERSION:-0.1.0}"
 ARCH="${ARCH:-x86_64}"
-RELEASEVER="${RELEASEVER:-10}"
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
 OUTDIR="${OUTDIR:-$HERE/output}"
-WORK="${WORK:-$HERE/.build}"
+WORK="${WORK:-/var/tmp/envy-black-veil-rpmbuild}"
 ISO_NAME="${ISO_NAME:-envy-black-veil-${VERSION}-${ARCH}.iso}"
-REPO_DIR="$WORK/envy-repo"
+# ISO 9660 volume IDs are at most 32 characters; the live boot finds its root by it.
+VOLID="${VOLID:-ENVY-BLACK-VEIL-${VERSION//./-}-${ARCH}}"
+REPO_DIR=/srv/envy-black-veil/repo          # must match the kickstart's envy-local repo
 KS="$HERE/kickstart/envy-black-veil.ks"
+BASEOS="https://repo.almalinux.org/almalinux/10/BaseOS/${ARCH}/os"
 
 say() { printf "\033[38;5;51m==>\033[0m %s\n" "$*"; }
 die() { printf "\033[38;5;205mbuild-iso:\033[0m %s\n" "$*" >&2; exit 1; }
@@ -31,48 +37,78 @@ die() { printf "\033[38;5;205mbuild-iso:\033[0m %s\n" "$*" >&2; exit 1; }
 # --- Preflight ---------------------------------------------------------------
 [ "$(uname -s)" = "Linux" ] || die "the ISO is built on Linux; this host is $(uname -s)."
 [ "$(id -u)" = "0" ] || die "run with sudo (livemedia-creator needs root)."
-for t in rpmbuild createrepo_c livemedia-creator ksvalidator rsvg-convert; do
-    command -v "$t" >/dev/null || die "missing '$t'. Install: lorax rpm-build createrepo_c pykickstart librsvg2-tools."
+[ "$(uname -m)" = "$ARCH" ] || die "build $ARCH images on an $ARCH host (this one is $(uname -m))."
+[ "${#VOLID}" -le 32 ] || die "volume ID '$VOLID' is longer than 32 characters."
+for t in rpmbuild createrepo_c livemedia-creator ksvalidator rsvg-convert curl python3; do
+    command -v "$t" >/dev/null || die "missing '$t'. Install: lorax lorax-templates-almalinux anaconda rpm-build createrepo_c pykickstart librsvg2-tools (see the top of this script)."
 done
+if [ -r /etc/os-release ]; then
+    # shellcheck disable=SC1091
+    . /etc/os-release
+    case "${ID:-}:${VERSION_ID:-}" in
+        almalinux:10*) ;;
+        *) say "warning: this recipe is tested on AlmaLinux 10; this host is ${PRETTY_NAME:-unknown}." ;;
+    esac
+fi
 
 say "Validating the kickstart"
 ksvalidator "$KS" || die "kickstart failed validation."
 
-# --- 1. Build the ENVY identity RPMs ----------------------------------------
-say "Building the ENVY identity RPMs (theme, release, calamares branding)"
-rm -rf "$WORK"; mkdir -p "$WORK"/{SOURCES,SPECS,RPMS,BUILD,BUILDROOT,SRPMS} "$REPO_DIR"
-TARBALL="$WORK/SOURCES/envy-black-veil-${VERSION}.tar.gz"
-tar --transform "s,^,envy-black-veil-${VERSION}/," \
-    -czf "$TARBALL" -C "$HERE" \
-    theme tools release installer LICENSE
-rpmbuild --define "_topdir $WORK" -ba "$HERE/packaging/envy-black-veil.spec"
-find "$WORK/RPMS" -name '*.rpm' -exec cp -v {} "$REPO_DIR/" \;
+# The AlmaLinux 10 minor release the image is built from (e.g. 10.3), read from
+# almalinux-release in the BaseOS repository, as AlmaLinux's own build does.
+if [ -z "${RELEASEVER:-}" ]; then
+    primary=$(curl -sf "$BASEOS/repodata/repomd.xml" | grep -oE 'repodata/[^"]*-primary\.xml\.gz' | head -n 1) || primary=
+    RELEASEVER=$(curl -sf "$BASEOS/$primary" | gunzip | python3 -c \
+        'import re,sys; print(re.search(r"<name>almalinux-release</name>.*?ver=\"([^\"]+)\"", sys.stdin.read(), re.S).group(1))') || RELEASEVER=
+    [[ "$RELEASEVER" =~ ^10\.[0-9]+$ ]] || die "couldn't read the AlmaLinux 10 release version from $BASEOS (got '$RELEASEVER')."
+fi
+say "Building from AlmaLinux $RELEASEVER"
 
-say "Publishing the local package repo"
+# --- 1. Build the ENVY identity RPMs ----------------------------------------
+say "Building the ENVY identity RPMs (theme, release + envy-tools)"
+rm -rf "$WORK"; mkdir -p "$WORK"/{SOURCES,SPECS,RPMS,BUILD,BUILDROOT,SRPMS}
+tar --transform "s,^,envy-black-veil-${VERSION}/," \
+    -czf "$WORK/SOURCES/envy-black-veil-${VERSION}.tar.gz" -C "$HERE" \
+    theme tools LICENSE
+rpmbuild --define "_topdir $WORK" -ba "$HERE/packaging/envy-black-veil.spec"
+
+say "Publishing the local package repo at $REPO_DIR"
+rm -rf "$REPO_DIR"; mkdir -p "$REPO_DIR"
+find "$WORK/RPMS" -name '*.rpm' -exec cp -v {} "$REPO_DIR/" \;
 createrepo_c "$REPO_DIR"
 
 # --- 2. Build the live ISO ---------------------------------------------------
-# The ENVY repo is handed to the installer as an extra source; the kickstart's
-# file:///run/install/repo/envy-repo line resolves it inside the build root.
-mkdir -p "$OUTDIR"
-say "Building the live ISO with livemedia-creator (this takes a while)"
+# AlmaLinux 10's live-media build runs with SELinux permissive on the build host;
+# the image itself still ships with SELinux enforcing (see the kickstart).
+if command -v getenforce >/dev/null && [ "$(getenforce)" = "Enforcing" ]; then
+    say "Setting SELinux to permissive on this build host for the duration of the build"
+    setenforce 0
+fi
+
+rm -rf "$OUTDIR/result"            # livemedia-creator refuses an existing result dir
+mkdir -p "$OUTDIR/logs"
+say "Building the live ISO with livemedia-creator (about 20–50 minutes)"
 livemedia-creator \
-    --make-iso \
     --ks "$KS" \
+    --no-virt \
+    --make-iso \
+    --iso-only \
     --iso-name "$ISO_NAME" \
     --project "ENVY BLACK VEIL" \
     --releasever "$RELEASEVER" \
+    --volid "$VOLID" \
     --resultdir "$OUTDIR/result" \
-    --extra-boot-args "quiet rhgb" \
-    --repo "$REPO_DIR" \
+    --logfile "$OUTDIR/logs/livemedia.log" \
     --nomacboot \
     "$@"
 
-ISO_PATH="$(find "$OUTDIR/result" -name '*.iso' | head -1 || true)"
-[ -n "$ISO_PATH" ] || die "livemedia-creator did not produce an ISO (see $OUTDIR/result)."
-cp -f "$ISO_PATH" "$OUTDIR/$ISO_NAME"
+ISO_PATH="$OUTDIR/result/$ISO_NAME"
+[ -f "$ISO_PATH" ] || ISO_PATH="$(find "$OUTDIR/result" -name '*.iso' | head -1 || true)"
+[ -n "$ISO_PATH" ] && [ -f "$ISO_PATH" ] || die "livemedia-creator did not produce an ISO (see $OUTDIR/logs)."
+mv -f "$ISO_PATH" "$OUTDIR/$ISO_NAME"
 ( cd "$OUTDIR" && sha256sum "$ISO_NAME" > "${ISO_NAME}.sha256" )
+echo "$VOLID" > "$OUTDIR/${ISO_NAME}.volid"
 
 say "Done:"
 printf "   %s\n   %s\n" "$OUTDIR/$ISO_NAME" "$OUTDIR/${ISO_NAME}.sha256"
-say "Write it to a USB with:  sudo dd if=$OUTDIR/$ISO_NAME of=/dev/sdX bs=4M status=progress oflag=sync"
+say "Write it to a USB stick with:  sudo dd if=$OUTDIR/$ISO_NAME of=/dev/sdX bs=4M status=progress oflag=sync"

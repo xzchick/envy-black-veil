@@ -4,3 +4,4 @@ output/
 *.iso
 *.iso.sha256
 __pycache__/
+.vm/

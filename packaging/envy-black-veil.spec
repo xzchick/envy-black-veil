@@ -1,13 +1,13 @@
-# ENVY BLACK VEIL identity packages: the theme, the release branding and the
-# Calamares installer branding. build/build-iso.sh builds these into a local repo
-# that the kickstart installs, so the live image boots fully themed.
+# ENVY BLACK VEIL identity packages: the theme and the release identity.
+# build/build-iso.sh builds these into a local repo that the kickstart installs,
+# so the live image boots fully themed.
 
 %global debug_package %{nil}
 
 Name:           envy-black-veil
 Version:        0.1.0
-Release:        1%{?dist}
-Summary:        ENVY BLACK VEIL identity: theme, release branding and installer branding
+Release:        2%{?dist}
+Summary:        ENVY BLACK VEIL identity: theme and release identity
 License:        MIT
 URL:            https://github.com/xzchick/envy-black-veil
 Source0:        %{name}-%{version}.tar.gz
@@ -15,9 +15,8 @@ BuildArch:      noarch
 BuildRequires:  librsvg2-tools
 
 %description
-Metapackage shell. Install the envy-black-veil-theme, envy-black-veil-release and
-calamares-branding-envy subpackages to turn a stock AlmaLinux + KDE Plasma system
-into ENVY BLACK VEIL.
+Metapackage shell. Install the envy-black-veil-theme and envy-black-veil-release
+subpackages to turn a stock AlmaLinux 10 + KDE Plasma 6 system into ENVY BLACK VEIL.
 
 # ---------------------------------------------------------------------------
 %package theme
@@ -29,27 +28,18 @@ Supplements:    (sddm and plymouth)
 %description theme
 The ENVY neon look: a Plasma colour scheme, an SDDM login theme, a Plymouth boot
 splash with a LUKS passphrase prompt, a GRUB menu theme, a Konsole profile and
-colour scheme, a desktop wallpaper, and sensible dark defaults in /etc/skel.
+colour scheme, a desktop wallpaper (made the default once per user), and sensible
+dark defaults in /etc/skel.
 
 # ---------------------------------------------------------------------------
 %package release
-Summary:        ENVY BLACK VEIL release identity and the envy-tools installer
-Provides:       system-release = %{version}
-Provides:       system-release(releasever) = %{version}
+Summary:        ENVY BLACK VEIL release file and the envy-tools installer
 
 %description release
-Brands the system as ENVY BLACK VEIL (os-release, MOTD) and installs `envy-tools`,
-the on-demand installer for the ENVY application suite.
-
-# ---------------------------------------------------------------------------
-%package -n calamares-branding-envy
-Summary:        ENVY BLACK VEIL branding and configuration for the Calamares installer
-Requires:       calamares
-BuildArch:      noarch
-
-%description -n calamares-branding-envy
-ENVY branding, slideshow and the install module sequence for Calamares, including
-support for installing to an external USB, SSD or HDD.
+Marks the system as ENVY BLACK VEIL (/etc/envy-black-veil-release) and installs
+`envy-tools`, the on-demand installer for the ENVY application suite. AlmaLinux's
+own release package stays in place, so dnf, repositories and updates keep working
+exactly as on AlmaLinux 10.
 
 # ---------------------------------------------------------------------------
 %prep
@@ -61,8 +51,6 @@ rsvg-convert -w 820 -h 300 theme/plymouth/envy-black-veil/logo.svg  -o theme/ply
 rsvg-convert -w 48  -h 48  theme/plymouth/envy-black-veil/spark.svg -o theme/plymouth/envy-black-veil/spark.png
 rsvg-convert -w 1920 -h 1080 theme/grub/envy-black-veil/background.svg -o theme/grub/envy-black-veil/background.png
 rsvg-convert -w 2560 -h 1440 theme/wallpaper/envy-black-veil.svg -o wallpaper-2560x1440.png
-rsvg-convert -w 420 -h 154 theme/plymouth/envy-black-veil/logo.svg -o calamares-logo.png
-rsvg-convert -w 820 -h 300 theme/plymouth/envy-black-veil/logo.svg -o calamares-welcome.png
 
 %install
 # --- theme ---------------------------------------------------------------
@@ -88,21 +76,19 @@ install -Dm644 theme/grub/envy-black-veil/background.png   %{buildroot}/boot/gru
 install -Dm644 wallpaper-2560x1440.png %{buildroot}%{_datadir}/wallpapers/EnvyBlackVeil/contents/images/2560x1440.png
 install -Dm644 theme/wallpaper/metadata.json %{buildroot}%{_datadir}/wallpapers/EnvyBlackVeil/metadata.json
 
+# Make the ENVY wallpaper the default (Plasma runs this once per user)
+install -Dm644 theme/plasma/updates/envy-black-veil-wallpaper.js \
+    %{buildroot}%{_datadir}/plasma/shells/org.kde.plasma.desktop/contents/updates/envy-black-veil-wallpaper.js
+
 # Dark defaults for every new user
 install -Dm644 theme/skel/.config/kdeglobals %{buildroot}%{_sysconfdir}/skel/.config/kdeglobals
 install -Dm644 theme/skel/.config/konsolerc  %{buildroot}%{_sysconfdir}/skel/.config/konsolerc
 
 # --- release -------------------------------------------------------------
-install -Dm644 release/os-release %{buildroot}%{_prefix}/lib/os-release
+install -d %{buildroot}%{_sysconfdir}
+echo "ENVY BLACK VEIL release %{version} (Nebula) — AlmaLinux 10 + KDE Plasma 6" \
+    > %{buildroot}%{_sysconfdir}/envy-black-veil-release
 install -Dm755 tools/envy-tools   %{buildroot}%{_bindir}/envy-tools
-
-# --- calamares branding --------------------------------------------------
-install -d %{buildroot}%{_datadir}/calamares/branding/envy
-cp -a installer/calamares/branding/envy/. %{buildroot}%{_datadir}/calamares/branding/envy/
-install -Dm644 calamares-logo.png    %{buildroot}%{_datadir}/calamares/branding/envy/logo.png
-install -Dm644 calamares-welcome.png %{buildroot}%{_datadir}/calamares/branding/envy/welcome.png
-install -Dm644 installer/calamares/settings.conf         %{buildroot}%{_sysconfdir}/calamares/settings.conf
-install -Dm644 installer/calamares/shellprocess-envy.conf %{buildroot}%{_sysconfdir}/calamares/modules/shellprocess-envy.conf
 
 %post theme
 if [ $1 -ge 1 ] && command -v plymouth-set-default-theme >/dev/null 2>&1; then
@@ -118,20 +104,21 @@ fi
 %{_datadir}/plymouth/themes/envy-black-veil/
 /boot/grub2/themes/envy-black-veil/
 %{_datadir}/wallpapers/EnvyBlackVeil/
+%{_datadir}/plasma/shells/org.kde.plasma.desktop/contents/updates/envy-black-veil-wallpaper.js
 %{_sysconfdir}/skel/.config/kdeglobals
 %{_sysconfdir}/skel/.config/konsolerc
 
 %files release
 %license LICENSE
-%{_prefix}/lib/os-release
+%config(noreplace) %{_sysconfdir}/envy-black-veil-release
 %{_bindir}/envy-tools
 
-%files -n calamares-branding-envy
-%license LICENSE
-%{_datadir}/calamares/branding/envy/
-%config(noreplace) %{_sysconfdir}/calamares/settings.conf
-%config(noreplace) %{_sysconfdir}/calamares/modules/shellprocess-envy.conf
-
 %changelog
+* Tue Nov 24 2026 Envy <235594225+xzchick@users.noreply.github.com> - 0.1.0-2
+- Build on AlmaLinux 10's own live-media recipe: Anaconda live installer (Calamares
+  is not packaged for EL10), livesys live session, the ENVY wallpaper as the default.
+- Keep AlmaLinux's release package; ship /etc/envy-black-veil-release instead of
+  replacing os-release, so dnf and updates work unchanged.
+
 * Sun Nov 08 2026 Envy <235594225+xzchick@users.noreply.github.com> - 0.1.0-1
 - First ENVY BLACK VEIL identity packages: theme, release branding, Calamares branding.

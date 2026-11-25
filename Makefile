@@ -22,7 +22,7 @@ validate-ks:
 
 validate-shell:
 	@echo "== shell =="
-	shellcheck -e SC2059 tools/envy-tools build/build-iso.sh
+	shellcheck -e SC2059 tools/envy-tools build/build-iso.sh ci/build-in-vm.sh
 
 validate-desktop:
 	@echo "== desktop entries (generated samples) =="
@@ -33,7 +33,7 @@ validate-desktop:
 
 validate-xml:
 	@echo "== QML / SVG well-formedness =="
-	@for f in theme/sddm/envy-black-veil/Main.qml installer/calamares/branding/envy/show.qml; do \
+	@for f in theme/sddm/envy-black-veil/Main.qml theme/sddm/envy-black-veil/metadata.desktop; do \
 		echo "  $$f"; done
 	@command -v xmllint >/dev/null && \
 		xmllint --noout theme/wallpaper/envy-black-veil.svg theme/grub/envy-black-veil/background.svg \

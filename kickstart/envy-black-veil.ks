@@ -1,68 +1,73 @@
-# ENVY BLACK VEIL — live ISO Kickstart
+# ENVY BLACK VEIL — live ISO kickstart
 # AlmaLinux 10 + KDE Plasma 6, themed in the ENVY neon palette.
 #
-# This builds JUST THE OS: a live, installable KDE desktop with the ENVY look and
-# the runtime every ENVY tool needs (Python 3 + Qt6 + cryptography). The tools
-# themselves are NOT bundled — you add any of them after install with
-# `envy-tools install` (see tools/install-envy-tools.sh). That keeps the image
-# small and lets you pick only what you want.
+# Built on AlmaLinux's own live-media recipe (github.com/AlmaLinux/sig-livemedia,
+# kickstarts/10/x86_64/almalinux-live-kde.ks) with the ENVY identity, privacy
+# defaults and the runtime ENVY apps need layered on top.
 #
-# Build it on a Linux host with:  sudo ./build/build-iso.sh
-# (that script stages the ENVY theme package and the repos this file expects).
+# This builds JUST THE OS: a live, installable KDE desktop. The ENVY apps are not
+# bundled; add any of them after install with `envy-tools install` (or the
+# standalone ENVY Tools app). Build it with:  sudo ./build/build-iso.sh
+#version=DEVEL
 
-# --- Install mode ------------------------------------------------------------
-text
-eula --agreed
+# --- Live system --------------------------------------------------------------
+xconfig --startxonboot
+keyboard 'us'
 lang en_US.UTF-8
-keyboard --vckeymap=us --xlayouts='us'
 timezone Etc/UTC --utc
-
-# The live session auto-logs-in as `envy`. The account is unprivileged; the
-# installer (Calamares) creates the real user on the installed system.
+# Root is locked. The live session's user comes from livesys-scripts at boot,
+# and the installer creates the real account on the installed system.
 rootpw --lock
-user --name=envy --groups=wheel --gecos="ENVY" --password=envy --plaintext
-# Lock down the live defaults the moment you install — see docs/.
+network --bootproto=dhcp --device=link --activate
+shutdown
 
-# --- Security defaults (privacy-first) --------------------------------------
+# --- Package sources ----------------------------------------------------------
+url --url=https://repo.almalinux.org/almalinux/10/BaseOS/$basearch/os/
+repo --name="appstream" --baseurl=https://repo.almalinux.org/almalinux/10/AppStream/$basearch/os/
+repo --name="extras" --baseurl=https://repo.almalinux.org/almalinux/10/extras/$basearch/os/
+repo --name="crb" --baseurl=https://repo.almalinux.org/almalinux/10/CRB/$basearch/os/
+# KDE Plasma 6 and the live-session scripts come from EPEL.
+repo --name="epel" --baseurl=https://dl.fedoraproject.org/pub/epel/10z/Everything/$basearch/
+# The ENVY identity packages, built by build/build-iso.sh into this local repo.
+repo --name="envy-local" --baseurl=file:///srv/envy-black-veil/repo
+
+# --- Security defaults (privacy-first) ---------------------------------------
 selinux --enforcing
-firewall --enabled
-# No listening services by default: nothing phones home, nothing listens.
-services --enabled=sddm,NetworkManager,firewalld,chronyd --disabled=sshd,cups
+# The firewall is on and opens nothing: no SSH or Cockpit (AlmaLinux's defaults)
+# and no mDNS (AlmaLinux's KDE image opens it). DHCPv6 replies stay allowed.
+firewall --enabled --remove-service=ssh --remove-service=cockpit
+services --disabled="sshd" --enabled="NetworkManager,firewalld"
 
-# --- Disk (live rootfs built by livemedia-creator) --------------------------
+# --- Image layout (the live root filesystem livemedia-creator builds) --------
+bootloader --location=none
 zerombr
 clearpart --all --initlabel
-part / --fstype ext4 --size 9216
-bootloader --timeout=5 --append="rhgb quiet"
+part / --size=10238
 
-# --- Package repositories ----------------------------------------------------
-# AlmaLinux BaseOS/AppStream come from the install tree livemedia-creator is
-# pointed at. KDE Plasma 6 and Calamares live in EPEL. The ENVY theme package is
-# served from a local repo that build-iso.sh creates next to this kickstart.
-repo --name=epel --baseurl=https://dl.fedoraproject.org/pub/epel/10/Everything/x86_64/
-repo --name=envy-local --baseurl=file:///run/install/repo/envy-repo
-
-%packages --excludedocs
-@core
-@base-x
-@fonts
-@hardware-support
-@standard
+%packages
+# Kernel
 kernel
-dracut-live
-grub2-pc
-grub2-efi-x64
-shim-x64
-efibootmgr
+kernel-modules
+kernel-modules-extra
 
-# --- KDE Plasma 6 desktop (from EPEL) ---------------------------------------
-@kde-desktop
-plasma-workspace
-plasma-desktop
-sddm
-sddm-kcm
-plymouth
+# The live installer (Anaconda, the same one AlmaLinux's own live media uses)
+anaconda
+anaconda-install-env-deps
+anaconda-live
+@anaconda-tools
+-fcoe-utils
+-sdubby
+
+# Live-media plumbing
+dracut-live
+glibc-all-langpacks
+livesys-scripts
+memtest86+
 plymouth-system-theme
+
+# KDE Plasma 6 desktop (from EPEL)
+@^kde-desktop-environment
+@standard
 dolphin
 konsole
 kate
@@ -71,69 +76,99 @@ gwenview
 ark
 spectacle
 kcalc
-partitionmanager
 plasma-systemmonitor
 firefox
+fuse
+epel-release
+# drop the tracker indexers gtk3 pulls in
+-tracker-miners
+-tracker
 
-# --- Installer ---------------------------------------------------------------
-calamares
-calamares-branding-envy
-
-# --- ENVY tool runtime (so any ENVY app installs cleanly after setup) -------
+# The runtime every ENVY app needs, so `envy-tools install` works offline-first
 python3
 python3-pip
-python3-devel
 python3-cryptography
 python3-pyqt6
 git
 
-# --- ENVY identity: theme, defaults, release branding ----------------------
-envy-black-veil-release
+# The ENVY identity: theme, defaults, release file and envy-tools
 envy-black-veil-theme
+envy-black-veil-release
 
-# Trim things a privacy-minded, offline-first desktop does not want.
+# Firmware for common laptop audio
+alsa-sof-firmware
+
+# Nothing that phones home or listens by default
 -PackageKit-command-not-found
--abrt
--abrt-addon-ccpp
--sendmail
 %end
 
-# --- Finishing touches on the built image -----------------------------------
+# --- Finishing touches on the built image ------------------------------------
 %post --erroronfail
-# Make the ENVY graphical boot splash the default.
-plymouth-set-default-theme envy-black-veil || true
+# Live session: livesys creates the live user and logs it into Plasma.
+systemctl enable livesys.service
+systemctl enable livesys-late.service
+sed -i 's/^livesys_session=.*/livesys_session="kde"/' /etc/sysconfig/livesys
 
-# Point SDDM at the ENVY login theme.
+# EPEL packages SDDM disabled; the desktop needs it.
+systemctl enable sddm.service
+
+# tmpfs for /tmp and /var/tmp, so caches don't fill the live overlay
+systemctl enable tmp.mount
+cat >> /etc/fstab << EOF
+vartmp   /var/tmp    tmpfs   defaults   0  0
+EOF
+
+# Privacy: nothing listens on the network by default. Printing and network
+# discovery stay installed but off until you turn them on.
+for unit in cups.service cups.socket cups-browsed.service avahi-daemon.service avahi-daemon.socket; do
+    systemctl disable "$unit" 2>/dev/null || :
+done
+
+# The ENVY boot splash and login screen
+plymouth-set-default-theme envy-black-veil
 install -d -m 0755 /etc/sddm.conf.d
-cat > /etc/sddm.conf.d/10-envy.conf <<'EOF'
+cat > /etc/sddm.conf.d/10-envy.conf << 'EOF'
 [Theme]
 Current=envy-black-veil
 EOF
 
-# Make GRUB use the ENVY theme and quiet, branded boot.
-if [ -f /boot/grub2/themes/envy-black-veil/theme.txt ]; then
-    sed -i 's|^GRUB_TERMINAL_OUTPUT=.*||' /etc/default/grub || true
-    grep -q '^GRUB_THEME=' /etc/default/grub \
-        && sed -i 's|^GRUB_THEME=.*|GRUB_THEME=/boot/grub2/themes/envy-black-veil/theme.txt|' /etc/default/grub \
-        || echo 'GRUB_THEME=/boot/grub2/themes/envy-black-veil/theme.txt' >> /etc/default/grub
-fi
+# A name of its own
+echo black-veil > /etc/hostname
 
-# Welcome note for the first terminal.
-cat > /etc/motd <<'EOF'
+# Show the installer in the menu and on the live user's desktop only (not in
+# /etc/skel, so installed users never get an "Install" icon). Icon fix as in
+# AlmaLinux's live media.
+cp -a /usr/share/icons/hicolor/scalable/apps/org.fedoraproject.AnacondaInstaller.svg \
+  /usr/share/icons/hicolor/48x48/apps/ 2>/dev/null || :
+sed -i 's/NoDisplay=true/NoDisplay=false/' /usr/share/applications/liveinst.desktop
+sed -i 's/^Name=.*/Name=Install ENVY BLACK VEIL/' /usr/share/applications/liveinst.desktop
+mkdir -p /home/liveuser/Desktop
+cp -a /usr/share/applications/liveinst.desktop /home/liveuser/Desktop/liveinst.desktop
+chmod +x /home/liveuser/Desktop/liveinst.desktop
+
+# Welcome note for the first terminal
+cat > /etc/motd << 'EOF'
 
   ENVY BLACK VEIL  —  a Linux world of my own.
 
-  This is just the OS. Add any ENVY tool whenever you want:
+  This is just the OS. Add any ENVY app whenever you want:
       envy-tools list
       envy-tools install vault veil hypothesis
 
 EOF
 
-# The live user should land straight on the desktop.
-install -d -m 0755 /etc/sddm.conf.d
-cat > /etc/sddm.conf.d/20-autologin.conf <<'EOF'
-[Autologin]
-User=envy
-Session=plasma
-EOF
+# Housekeeping, as AlmaLinux's live media does it
+rpm --import /etc/pki/rpm-gpg/RPM-GPG-KEY-AlmaLinux-10 2>/dev/null || rpm --import /etc/pki/rpm-gpg/RPM-GPG-KEY-AlmaLinux || :
+rm -f /var/lib/rpm/__db*
+rm -f /core*
+rm -f /var/lib/systemd/random-seed
+echo 'File created by kickstart. See systemd-update-done.service(8).' | tee /etc/.updated >/var/.updated
+rm -f /boot/*-rescue*
+systemctl disable network 2>/dev/null || :
+rm -f /etc/machine-id
+touch /etc/machine-id
+dnf config-manager --enable crb || :
+
+echo "Packages in the ENVY BLACK VEIL image:"
+rpm -qa | sort
 %end

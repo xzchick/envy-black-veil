@@ -17,14 +17,17 @@ jobs:
       - name: Install validators
         run: |
           sudo apt-get update
-          sudo apt-get install -y shellcheck desktop-file-utils libxml2-utils python3-yaml rpm
+          sudo apt-get install -y shellcheck desktop-file-utils libxml2-utils python3-yaml rpm librsvg2-bin
           sudo pip install --break-system-packages pykickstart
 
       - name: Validate the kickstart
         run: ksvalidator kickstart/envy-black-veil.ks
 
       - name: ShellCheck the scripts
-        run: shellcheck -e SC2059 tools/envy-tools build/build-iso.sh
+        run: shellcheck -e SC2059 tools/envy-tools build/build-iso.sh ci/build-in-vm.sh
+
+      - name: Check the boot-test script compiles
+        run: python3 -m py_compile ci/boot-test.py
 
       - name: Check SVG art is well-formed
         run: |
@@ -34,22 +37,8 @@ jobs:
             theme/plymouth/envy-black-veil/logo.svg \
             theme/plymouth/envy-black-veil/spark.svg
 
-      - name: Validate JSON / YAML config
-        run: |
-          python3 -c "import json; json.load(open('theme/wallpaper/metadata.json'))"
-          python3 - <<'PY'
-          import sys, re, pathlib
-          # branding.desc and settings.conf are YAML; parse with a tolerant loader if available.
-          try:
-              import yaml
-          except ImportError:
-              print("PyYAML not present; skipping deep YAML parse"); sys.exit(0)
-          for f in ["installer/calamares/branding/envy/branding.desc",
-                    "installer/calamares/settings.conf",
-                    "installer/calamares/shellprocess-envy.conf"]:
-              yaml.safe_load(pathlib.Path(f).read_text())
-              print("ok:", f)
-          PY
+      - name: Validate JSON config
+        run: python3 -c "import json; json.load(open('theme/wallpaper/metadata.json'))"
 
       - name: Lint desktop-entry generation
         run: |
@@ -57,9 +46,9 @@ jobs:
           desktop-file-validate sample.desktop
           rm -f sample.desktop
 
-      - name: Sanity-check the RPM spec parses
+      - name: Build the ENVY identity RPMs (catches spec mistakes in a minute)
         run: |
-          # rpmspec --parse needs macros present; at minimum the file must tokenize.
-          grep -q '^Name:[[:space:]]*envy-black-veil' packaging/envy-black-veil.spec
-          grep -q '%package theme' packaging/envy-black-veil.spec
-          echo "spec structure present"
+          mkdir -p .build/SOURCES
+          tar --transform "s,^,envy-black-veil-0.1.0/," -czf .build/SOURCES/envy-black-veil-0.1.0.tar.gz theme tools LICENSE
+          rpmbuild --nodeps --define "_topdir $PWD/.build" -bb packaging/envy-black-veil.spec
+          for f in .build/RPMS/noarch/*.rpm; do echo "== $f"; rpm -qlp "$f"; done

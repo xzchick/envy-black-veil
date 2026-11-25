@@ -1,0 +1,95 @@
+name: ISO
+
+# Build the ENVY BLACK VEIL live ISO in a throwaway AlmaLinux 10 VM (the way
+# AlmaLinux builds its own live media), then boot it in a VM and check it from
+# the inside: UEFI boot path, desktop, SELinux, firewall, nothing listening, and
+# the ENVY identity. Screenshots, logs and the ISO are kept as artifacts.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - kickstart/**
+      - packaging/**
+      - theme/**
+      - tools/**
+      - build/**
+      - ci/**
+      - .github/workflows/iso.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: iso-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  iso:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 240
+    env:
+      WORK: /mnt/envy
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Make room on the runner
+        run: |
+          df -h / /mnt 2>/dev/null || df -h /
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL /usr/local/share/boost
+          sudo docker image prune -af >/dev/null 2>&1 || true
+          sudo mkdir -p "$WORK" && sudo chown "$(id -u):$(id -g)" "$WORK"
+          df -h / "$WORK"
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          ls -l /dev/kvm
+
+      - name: Install QEMU, UEFI firmware and image tools
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q qemu-system-x86 qemu-utils ovmf cloud-image-utils xorriso
+
+      - name: Build the ISO in an AlmaLinux 10 VM
+        run: VMDIR="$WORK/vm" OUT="$WORK/out" ci/build-in-vm.sh
+
+      - name: Boot the ISO and check it
+        run: python3 ci/boot-test.py --iso "$(ls "$WORK"/out/envy-black-veil-*.iso)" --out "$WORK/test"
+
+      - name: Keep the boot-test screenshots and results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: boot-test
+          path: |
+            ${{ env.WORK }}/test/*.png
+            ${{ env.WORK }}/test/*.log
+            ${{ env.WORK }}/test/results.json
+            ${{ env.WORK }}/test/summary.md
+          if-no-files-found: ignore
+
+      - name: Keep the build logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-logs
+          path: |
+            ${{ env.WORK }}/out/*.log
+            ${{ env.WORK }}/out/livemedia-logs.tar.gz
+            ${{ env.WORK }}/vm/console.log
+          if-no-files-found: ignore
+
+      - name: Keep the ISO (14 days)
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: envy-black-veil-iso
+          path: |
+            ${{ env.WORK }}/out/envy-black-veil-*.iso
+            ${{ env.WORK }}/out/envy-black-veil-*.iso.sha256
+          retention-days: 14
+          compression-level: 0
