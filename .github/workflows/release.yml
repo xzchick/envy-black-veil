@@ -99,7 +99,7 @@ jobs:
           | Windows PC, Linux PC, Intel Mac | \`envy-black-veil-${version}-x86_64.iso\` |
           | Apple Silicon Mac, ARM PC | \`envy-black-veil-${version}-aarch64.iso\` |
 
-          Try it in a VM with one command on Windows, macOS or Linux, or from a USB stick: [docs/try-it.md](https://github.com/xzchick/envy-black-veil/blob/${TAG}/docs/try-it.md).
+          Try it in a VM with one command on Windows, macOS or Linux: [docs/try-it.md](https://github.com/xzchick/envy-black-veil/blob/${TAG}/docs/try-it.md). On a real computer, write it to a USB stick and boot it with Secure Boot on. Its boot menu can keep your changes on the stick: [the USB guide](https://github.com/xzchick/envy-black-veil/blob/${TAG}/docs/install-to-external-drive.md). Then tell me how it went: open **Hardware Report** from the menu and paste what it writes into a [hardware report](https://github.com/xzchick/envy-black-veil/issues/new?template=hardware-report.yml).
 
           Before you use it, check the download (and, with [cosign](https://docs.sigstore.dev/cosign/system_config/installation/), that it was built here):
 
@@ -110,7 +110,7 @@ jobs:
             --certificate-oidc-issuer https://token.actions.githubusercontent.com SHA256SUMS.txt
           \`\`\`
 
-          Every package in each image is listed in its \`.packages.txt\` and CycloneDX SBOM (\`.cdx.json\`). Before publishing, [this run](${RUN_URL}) booted both ISOs to the live desktop and checked them from the inside (SELinux, firewall, nothing listening or phoning home, the ENVY look); the x86_64 ISO was also booted with Secure Boot on, installed with LUKS2 encryption, and its installed system booted and checked.
+          Every package in each image is listed in its \`.packages.txt\` and CycloneDX SBOM (\`.cdx.json\`). Before publishing, [this run](${RUN_URL}) booted both ISOs to the live desktop and checked them from the inside (SELinux, firewall, nothing listening or phoning home, the ENVY look); the x86_64 ISO was also booted with Secure Boot on, written to a virtual USB stick and booted twice with *keep changes* (what the first boot changed had to be there on the second), installed with LUKS2 encryption, and its installed system booted and checked.
           EOF
           cat notes.md
 
