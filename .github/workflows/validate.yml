@@ -59,7 +59,8 @@ jobs:
       - name: Build the ENVY identity RPMs (catches spec mistakes in a minute)
         run: |
           mkdir -p .build/SOURCES
-          tar --transform "s,^,envy-black-veil-0.1.0/," -czf .build/SOURCES/envy-black-veil-0.1.0.tar.gz theme tools privacy live LICENSE
+          v=$(awk '/^Version:/ {print $2}' packaging/envy-black-veil.spec)
+          tar --transform "s,^,envy-black-veil-$v/," -czf ".build/SOURCES/envy-black-veil-$v.tar.gz" theme tools privacy live LICENSE
           rpmbuild --nodeps --define "_topdir $PWD/.build" -bb packaging/envy-black-veil.spec
           for f in .build/RPMS/noarch/*.rpm; do echo "== $f"; rpm -qlp "$f"; done
 

@@ -16,7 +16,29 @@ permissions:
   contents: read
 
 jobs:
+  version:
+    # A tag must name the version the ISOs are built as (build/build-iso.sh and the
+    # RPM spec), or the release would publish ISOs named for another version.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: The tag, the ISO build and the packages agree on the version
+        env:
+          TAG: ${{ github.ref_name }}
+          EVENT: ${{ github.event_name }}
+        run: |
+          build=$(sed -n 's/^VERSION="${VERSION:-\([^}]*\)}"$/\1/p' build/build-iso.sh)
+          spec=$(awk '/^Version:/ {print $2}' packaging/envy-black-veil.spec)
+          echo "build-iso.sh: $build · spec: $spec · tag: $TAG ($EVENT)"
+          [ -n "$build" ] && [ "$build" = "$spec" ] \
+            || { echo "build/build-iso.sh ($build) and the spec ($spec) name different versions"; exit 1; }
+          if [ "$EVENT" = push ] && [ "$TAG" != "v$build" ]; then
+            echo "The tag $TAG doesn't match the version the ISOs are built as (v$build): bump both first."
+            exit 1
+          fi
+
   iso:
+    needs: version
     uses: ./.github/workflows/iso.yml
 
   publish:

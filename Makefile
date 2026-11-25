@@ -2,7 +2,7 @@
 # The real work is in build/build-iso.sh (Linux only). These targets wrap it and
 # the validators so `make validate` can run anywhere with the right tools.
 
-VERSION ?= 0.1.0
+VERSION ?= $(shell awk '/^Version:/ {print $$2}' packaging/envy-black-veil.spec)
 ARCH    ?= x86_64
 
 .PHONY: help validate validate-ks validate-shell validate-desktop validate-xml iso clean
