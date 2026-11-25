@@ -113,5 +113,9 @@ CI runs this, plus a test build of the identity RPMs, on every push.
 - **Keep changes on a USB stick**: the live boot menu's *keep changes* entry, and a small dracut module ([`live/`](../live), package `envy-black-veil-live`) that turns a stick's free space into storage on first use. [`build/lorax-templates.py`](../build/lorax-templates.py) adds the entry to lorax's boot menus, and gives the aarch64 ISO the same USB layout as x86_64 (a GPT with its EFI system partition).
 - The **Hardware Report** ([`tools/envy-hardware-report`](../tools/envy-hardware-report)): this computer's hardware, drivers and firmware problems, as a file to share without anything that identifies you.
 - BLACK VEIL's **signed package repository** and its key (above), so its own packages update with `dnf upgrade`; the image trusts the key from the start.
-- AlmaLinux's own release package stays in place, so `dnf`, the repositories and updates work exactly as on AlmaLinux 10; BLACK VEIL marks itself with `/etc/envy-black-veil-release`.
+- AlmaLinux's own release package stays in place, so `dnf`, the repositories and updates work exactly as on AlmaLinux 10.
+  - BLACK VEIL's name goes on top: [`tools/envy-os-release`](../tools/envy-os-release) writes `/etc/os-release` from AlmaLinux's `/usr/lib/os-release`, with BLACK VEIL's `NAME`, `VERSION`, `PRETTY_NAME`, logo and links.
+  - `ID=almalinux`, `VERSION_ID` and the rest stay AlmaLinux's, for compatibility; Anaconda also picks its AlmaLinux settings by that `ID`.
+  - An RPM trigger rewrites the file whenever `almalinux-release` updates it.
+  - The installer calls itself ENVY BLACK VEIL, and the release is also in `/etc/envy-black-veil-release`.
 - **No ENVY applications.** They're added on the installed system with `envy-tools`.

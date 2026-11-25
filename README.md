@@ -197,6 +197,9 @@ sudo ./build/build-iso.sh          # -> output/envy-black-veil-0.1.0-<arch>.iso
   - BLACK VEIL's release package points `dnf` at it, so `dnf upgrade` updates the ENVY packages too.
   - Every publication is installed from by a fresh AlmaLinux 10 with signature checks on.
   - On 0.1.0, add it with `sudo dnf config-manager --add-repo https://xzchick.github.io/envy-black-veil/envy-black-veil.repo`.
-- [ ] BLACK VEIL's own release identity (os-release), kept in step with AlmaLinux's updates through that repository.
+- [x] BLACK VEIL's own release identity.
+  - `/etc/os-release` names ENVY BLACK VEIL, so `hostnamectl`, the console login and KDE's *About this System* say ENVY BLACK VEIL, with its logo. The installer calls itself ENVY BLACK VEIL too.
+  - `ID`, `VERSION_ID` and the rest stay AlmaLinux's, so software and the installer's settings that check for AlmaLinux keep working.
+  - The file is AlmaLinux's own with BLACK VEIL's name on it, rewritten whenever AlmaLinux updates it, so it stays in step with every AlmaLinux 10 release.
 
 <p align="center"><sub>MIT licensed. Created by <a href="https://github.com/xzchick">Envy (@xzchick)</a>. Built on AlmaLinux and KDE; the ENVY identity, theme and tooling are my own.</sub></p>
