@@ -79,7 +79,7 @@ if [ ! -f "$DISK" ]; then
 fi
 
 # Hardware acceleration when the VM matches this computer.
-accel=(-accel tcg,thread=multi -cpu max)
+accel=(-accel "tcg,thread=multi" -cpu max)
 if [ "$ARCH" = "$HOST_ARCH" ]; then
     if [ "$OS" = Darwin ]; then
         accel=(-accel hvf -cpu host)
@@ -94,11 +94,11 @@ fi
 
 if [ "$ARCH" = aarch64 ]; then
     machine=(-machine virt)
-    display_dev=(-device virtio-gpu-pci,edid=on,xres=1600,yres=900)
-    cdrom=(-drive "file=$ISO,if=none,id=cd0,media=cdrom,readonly=on" -device virtio-scsi-pci,id=scsi0 -device scsi-cd,drive=cd0)
+    display_dev=(-device "virtio-gpu-pci,edid=on,xres=1600,yres=900")
+    cdrom=(-drive "file=$ISO,if=none,id=cd0,media=cdrom,readonly=on" -device "virtio-scsi-pci,id=scsi0" -device "scsi-cd,drive=cd0")
 else
     machine=(-machine q35)
-    display_dev=(-vga none -device virtio-vga,edid=on,xres=1600,yres=900)
+    display_dev=(-vga none -device "virtio-vga,edid=on,xres=1600,yres=900")
     cdrom=(-drive "file=$ISO,media=cdrom,readonly=on")
 fi
 [ -n "$ISO" ] || cdrom=()
