@@ -405,11 +405,9 @@ def live_checks(res: Results, qmp: QMP, args, out: Path) -> None:
     res.check("ENVY boot splash is the default", "plymouth-set-default-theme", ok=lambda rc, o: o == "envy-black-veil")
     res.check("ENVY login theme selected", "grep -h '^Current=' /etc/sddm.conf.d/*.conf",
               ok=lambda rc, o: "envy-black-veil" in o)
-    res.check("ENVY colour scheme for the user",
-              "grep -h -E '^(ColorScheme|LookAndFeelPackage)=' ~/.config/kdeglobals /etc/xdg/kdeglobals 2>/dev/null",
-              ok=lambda rc, o: "ColorScheme=EnvyNeon" in o)
-    res.check("user's kdeglobals (head)", "ls -la ~/.config/kdeglobals /etc/skel/.config/kdeglobals; head -n 12 ~/.config/kdeglobals",
-              required=False)
+    res.check("ENVY colours on the desktop (window background 10,14,34)",
+              "kreadconfig6 --file kdeglobals --group Colors:Window --key BackgroundNormal",
+              ok=lambda rc, o: o == "10,14,34")
     res.check("ENVY wallpaper on the desktop",
               "grep -h -A3 'Wallpaper..org.kde.image..General' ~/.config/plasma-org.kde.plasma.desktop-appletsrc",
               ok=lambda rc, o: "EnvyBlackVeil" in o)
@@ -430,15 +428,19 @@ def install_to_disk(res: Results, args, out: Path) -> bool:
     con.run("cat > /tmp/envy-install.ks << 'EOF'\n" + install_ks(PLATFORM["tty"]) + "EOF\ntrue", 30)
     res.check("install: kickstart in place", "grep -c . /tmp/envy-install.ks")
     # Run the installer in the background (the serial shell stays responsive), then poll.
-    # The same environment liveinst sets up (it's what the desktop icon runs): the live
-    # user's session bus (Anaconda asks the desktop not to blank the screen through it)
-    # and the product name and version from /etc/system-release.
-    env = ("env DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$(id -u)/bus XDG_RUNTIME_DIR=/run/user/$(id -u)"
+    # The same environment liveinst sets up (it's what the desktop icon runs, via pkexec):
+    # the live user's session bus and PKEXEC_UID, which Anaconda uses to switch to the
+    # user while it asks the desktop not to blank the screen, and the product name and
+    # version from /etc/system-release. Like liveinst, SELinux is permissive while the
+    # installer runs and restored afterwards (the installed system is enforcing).
+    env = ("env PKEXEC_UID=$(id -u) DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$(id -u)/bus"
+           " XDG_RUNTIME_DIR=/run/user/$(id -u)"
            " ANACONDA_PRODUCTNAME=\"$(sed -r -e 's/ *release.*//' /etc/system-release)\""
            " ANACONDA_PRODUCTVERSION=\"$(sed -r -e 's/^.* ([0-9.]+).*$/\\1/' /etc/system-release)\""
            " ANACONDA_ISFINAL=true")
-    con.run("{ ( " + SUDO + " " + env + " sh -c 'anaconda --liveinst --cmdline --kickstart=/tmp/envy-install.ks"
-            " > /tmp/envy-install.log 2>&1; echo $? > /tmp/envy-install.rc' ) > /dev/null 2>&1 & }", 30)
+    con.run("{ ( " + SUDO + " " + env + " sh -c 'setenforce 0; anaconda --liveinst --cmdline"
+            " --kickstart=/tmp/envy-install.ks > /tmp/envy-install.log 2>&1; echo $? > /tmp/envy-install.rc;"
+            " setenforce 1' ) > /dev/null 2>&1 & }", 30)
     started, last, status = time.monotonic(), "", None
     while time.monotonic() - started < args.install_timeout:
         time.sleep(20)
@@ -574,7 +576,7 @@ def boot_installed(args, out: Path, res: Results, disk: Path) -> None:
         for name, command, ok, required in no_network_listeners("installed: ", s):
             res.check(name, command, ok=ok, required=required)
         res.check("installed: ENVY packages", "rpm -q envy-black-veil-theme envy-black-veil-release")
-        res.check("installed: ENVY colours for the new user",
+        res.check("installed: ENVY colours for the new user (skel)",
                   "grep -h '^ColorScheme=' ~/.config/kdeglobals 2>/dev/null", ok=lambda rc, o: "EnvyNeon" in o)
         res.check("installed: no live-installer icon for the new user",
                   "ls ~/Desktop 2>/dev/null | grep -c liveinst || true", ok=lambda rc, o: o.strip() in ("", "0"))

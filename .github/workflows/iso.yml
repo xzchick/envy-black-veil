@@ -141,6 +141,10 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
+          # The container shares this runner's kernel, whose root is ext4: load XFS (EL10's
+          # default filesystem, which Anaconda's storage module insists on), loop and squashfs.
+          sudo modprobe -a xfs loop squashfs
+          grep -E 'xfs|squashfs' /proc/filesystems
           # AlmaLinux's systemd-enabled image: Anaconda gets systemd, the system bus and
           # udev, as on the VM that builds x86_64.
           sudo docker run -d --name envy-builder --privileged --cgroupns=host \
@@ -152,7 +156,8 @@ jobs:
               set -e
               dnf -y -q install epel-release
               dnf -y install lorax lorax-templates-almalinux anaconda rpm-build createrepo_c pykickstart \
-                librsvg2-tools grub2-tools-extra dejavu-sans-fonts libblockdev-nvme zstd python3 gzip curl
+                librsvg2-tools grub2-tools-extra dejavu-sans-fonts libblockdev-nvme zstd python3 gzip curl \
+                xfsprogs e2fsprogs squashfs-tools
               OUTDIR=/out ./build/build-iso.sh
             ' 2>&1 | tee "$WORK/build-aarch64.log"
           ls -la "$WORK/out"
