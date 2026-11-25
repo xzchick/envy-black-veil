@@ -140,7 +140,7 @@ report() {
     sound=$(sed -n 's/^ *[0-9]* \[[^]]*\]: \(.*\)$/\1/p' /proc/asound/cards 2> /dev/null | paste -sd ';' - | sed 's/;/; /g')
     [ -n "$sound" ] || sound="no sound card found"
     local sinks=""
-    have pactl && sinks=$(pactl list short sinks 2> /dev/null | awk '{print $2}' | paste -sd ',' - | sed 's/,/, /g')
+    have pactl && sinks=$(pactl list short sinks 2> /dev/null | awk '$2 != "auto_null" {print $2}' | paste -sd ',' - | sed 's/,/, /g')
 
     local battery="none (or not reported)"
     for b in /sys/class/power_supply/BAT*; do
@@ -156,7 +156,9 @@ report() {
 
     local session="${XDG_SESSION_TYPE:-no graphical session}"
     [ -n "${XDG_CURRENT_DESKTOP:-}" ] && session+=", ${XDG_CURRENT_DESKTOP}"
-    have plasmashell && session+=" ($(plasmashell --version 2> /dev/null))"
+    local plasma=""
+    have plasmashell && plasma=$(plasmashell --version 2> /dev/null)
+    [ -n "$plasma" ] && session+=" ($plasma)"
 
     # Automatic checks: things that commonly go wrong on real hardware.
     local klog nodriver fw failed
