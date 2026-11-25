@@ -93,6 +93,11 @@ epel-release
 # auto-login up there instead of in SDDM.
 -plasma-login-manager
 -kde-settings-plasmalogin
+# KDE Connect pairs phones over the network (it listens on port 1716 and announces
+# itself with mDNS): not on by default in a privacy-first OS. Install it if you want it.
+-kde-connect
+-kdeconnectd
+-kde-connect-libs
 
 # The runtime every ENVY app needs, so `envy-tools install` works offline-first
 python3
