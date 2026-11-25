@@ -547,6 +547,15 @@ def no_phone_home(prefix, sudo):
     ]
 
 
+def identity(prefix):
+    """BLACK VEIL's name in os-release, with AlmaLinux's ID and version underneath."""
+    return (f"{prefix}calls itself ENVY BLACK VEIL (os-release), AlmaLinux underneath",
+            "sh -c '. /etc/os-release; echo \"$NAME|$ID|$VERSION_ID|$PRETTY_NAME\"'",
+            lambda rc, o: (len(o.split("|")) == 4 and o.split("|")[0] == "ENVY BLACK VEIL"
+                           and o.split("|")[1] == "almalinux" and o.split("|")[2].startswith("10.")
+                           and o.split("|")[3].startswith("ENVY BLACK VEIL ")), True)
+
+
 def update_repo(prefix, sudo):
     """BLACK VEIL's own signed package repository: set up, its key trusted from the start.
     Whether it answers depends on the network, so that one only informs."""
@@ -681,6 +690,11 @@ def live_checks(res: Results, qmp: QMP, args, out: Path) -> None:
         res.check(name, command, ok=ok, required=required)
     res.check("ENVY packages installed", "rpm -q envy-black-veil-theme envy-black-veil-release")
     res.check("ENVY release file", "cat /etc/envy-black-veil-release", ok=lambda rc, o: "ENVY BLACK VEIL" in o)
+    name, command, ok, required = identity("")
+    res.check(name, command, ok=ok, required=required)
+    res.check("the installer calls itself ENVY BLACK VEIL",
+              "grep -c '^[[:space:]]*ANACONDA_PRODUCTNAME=\"ENVY BLACK VEIL\"$' /usr/bin/liveinst",
+              ok=lambda rc, o: o == "1")
     res.check("ENVY boot splash is the default", "plymouth-set-default-theme", ok=lambda rc, o: o == "envy-black-veil")
     res.check("ENVY login theme selected", "grep -h '^Current=' /etc/sddm.conf.d/*.conf",
               ok=lambda rc, o: "envy-black-veil" in o)
@@ -724,12 +738,12 @@ def install_to_disk(res: Results, args, out: Path) -> bool:
     # The same environment liveinst sets up (it's what the desktop icon runs, via pkexec):
     # the live user's session bus and PKEXEC_UID, which Anaconda uses to switch to the
     # user while it asks the desktop not to blank the screen, and the product name and
-    # version from /etc/system-release. Like liveinst, SELinux is permissive while the
+    # version liveinst gives it (ENVY BLACK VEIL's, set in the kickstart). Like liveinst, SELinux is permissive while the
     # installer runs and restored afterwards (the installed system is enforcing).
     env = ("env PKEXEC_UID=$(id -u) DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$(id -u)/bus"
            " XDG_RUNTIME_DIR=/run/user/$(id -u)"
-           " ANACONDA_PRODUCTNAME=\"$(sed -r -e 's/ *release.*//' /etc/system-release)\""
-           " ANACONDA_PRODUCTVERSION=\"$(sed -r -e 's/^.* ([0-9.]+).*$/\\1/' /etc/system-release)\""
+           " ANACONDA_PRODUCTNAME=\"$(sed -n -E 's/^[[:space:]]*ANACONDA_PRODUCTNAME=\"?([^\"]*)\"?$/\\1/p' /usr/bin/liveinst)\""
+           " ANACONDA_PRODUCTVERSION=\"$(sed -n -E 's/^[[:space:]]*ANACONDA_PRODUCTVERSION=\"?([^\"]*)\"?$/\\1/p' /usr/bin/liveinst)\""
            " ANACONDA_ISFINAL=true")
     # In live mode Anaconda ignores --kickstart and parses its interactive defaults,
     # /usr/share/anaconda/interactive-defaults.ks, instead (BLACK VEIL's own defaults
@@ -760,6 +774,8 @@ def install_to_disk(res: Results, args, out: Path) -> bool:
         rc, text = con.run(f"{SUDO} tail -n 120 {f} 2>/dev/null", 60)
         logs.append(f"===== {f}\n{text}\n")
     (out / "install-logs.txt").write_text("\n".join(logs))
+    res.check("install: the computer's boot menu gets an ENVY BLACK VEIL entry (efibootmgr)",
+              f"{SUDO} efibootmgr | grep -i 'ENVY BLACK VEIL' || {SUDO} efibootmgr", required=False)
     con.run(f"{SUDO} sync", 60)
     return done
 
@@ -897,9 +913,10 @@ def boot_installed(args, out: Path, res: Results, disk: Path, secure: bool = Fal
                   ok=lambda rc, o: "envy-black-veil/theme.txt" in o and "gfxterm" in o)
         res.check("installed: boot menu entries named ENVY BLACK VEIL",
                   f"{s} sh -c \"grep -h '^title' /boot/loader/entries/*.conf\"",
-                  ok=lambda rc, o: bool(o) and all("ENVY BLACK VEIL" in line for line in o.splitlines()))
+                  ok=lambda rc, o: bool(o) and all(line.startswith("title ENVY BLACK VEIL (") and " on AlmaLinux 10" in line
+                                                   for line in o.splitlines()))
         for name, command, ok, required in (no_network_listeners("installed: ", s) + no_phone_home("installed: ", s)
-                                            + update_repo("installed: ", s)):
+                                            + update_repo("installed: ", s) + [identity("installed: ")]):
             res.check(name, command, ok=ok, required=required)
         res.check("installed: ENVY packages", "rpm -q envy-black-veil-theme envy-black-veil-release")
         res.check("installed: ENVY colours for the new user (skel)",
