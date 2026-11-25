@@ -17,6 +17,7 @@
   <img src="https://img.shields.io/badge/SELinux-enforcing-ff3db4?style=flat-square&labelColor=050713" alt="SELinux enforcing" />
   <img src="https://img.shields.io/badge/network-none_by_default-35e8ff?style=flat-square&labelColor=050713" alt="No network services by default" />
   <img src="https://img.shields.io/badge/license-MIT-ac8cff?style=flat-square&labelColor=050713" alt="MIT license" />
+  <a href="https://github.com/xzchick/envy-black-veil/releases/latest"><img src="https://img.shields.io/badge/download-v0.1.0_ISO-ff3db4?style=flat-square&labelColor=050713" alt="Download the v0.1.0 ISO" /></a>
 </p>
 
 > **Built and tested end to end, for PCs and Apple Silicon.** Every change builds the ISO for **x86_64** and **aarch64** and boots it in VMs ([ISO workflow](https://github.com/xzchick/envy-black-veil/actions/workflows/iso.yml)): UEFI through its own boot menu, **also with Secure Boot on**; the live KDE desktop logging in by itself; SELinux enforcing, the firewall closed, **nothing listening and nothing phoning home**. Then it **installs BLACK VEIL unattended** onto a blank disk with LUKS2 encryption, boots the installed disk on fresh firmware, types the passphrase into the ENVY splash, checks the installed system the same way and signs in on the ENVY login screen. Real-hardware testing comes next. It's a young `v0.1.0`.
@@ -40,6 +41,8 @@
 
 ## Try it
 
+**[Download v0.1.0](https://github.com/xzchick/envy-black-veil/releases/latest)**: `envy-black-veil-0.1.0-x86_64.iso` for Windows and Linux PCs and Intel Macs, `envy-black-veil-0.1.0-aarch64.iso` for Apple Silicon Macs and ARM PCs. Each comes with Sigstore-signed checksums (how to check them is in the release notes), a package list and an SBOM.
+
 On **Windows, macOS or Linux** — in a virtual machine (nothing on your computer changes) or from a USB stick:
 
 ```sh
@@ -52,7 +55,7 @@ On **Windows, macOS or Linux** — in a virtual machine (nothing on your compute
 powershell -ExecutionPolicy Bypass -File .\try-black-veil.ps1 .\envy-black-veil-0.1.0-x86_64.iso
 ```
 
-Each sets up a VM the way BLACK VEIL needs it (UEFI, 6 GB, 4 CPUs, a 40 GB disk to install onto; on Hyper-V, Secure Boot with the Microsoft UEFI CA template) and boots the live desktop. Step by step for **UTM, Parallels, VMware, VirtualBox, GNOME Boxes and virt-manager**, plus USB sticks: **[docs/try-it.md](docs/try-it.md)**. The ISOs come from the latest green [ISO workflow run](https://github.com/xzchick/envy-black-veil/actions/workflows/iso.yml) (its *envy-black-veil-iso* artifacts, each with a SHA-256 file, a package list and an SBOM).
+Each sets up a VM the way BLACK VEIL needs it (UEFI, 6 GB, 4 CPUs, a 40 GB disk to install onto; on Hyper-V, Secure Boot with the Microsoft UEFI CA template) and boots the live desktop. Step by step for **UTM, Parallels, VMware, VirtualBox, GNOME Boxes and virt-manager**, plus USB sticks: **[docs/try-it.md](docs/try-it.md)**. Builds of every later change are kept for 14 days as artifacts of the [ISO workflow](https://github.com/xzchick/envy-black-veil/actions/workflows/iso.yml).
 
 ---
 
@@ -179,7 +182,7 @@ sudo ./build/build-iso.sh          # -> output/envy-black-veil-0.1.0-<arch>.iso
 - [x] aarch64 ISO for Apple Silicon Macs and ARM PCs.
 - [x] Secure Boot: AlmaLinux's signed boot chain, unchanged, boots the live ISO and installed systems with Secure Boot on (Microsoft's keys), with the kernel locked down.
 - [x] Nothing phones home by default, and each ISO under GitHub's 2 GiB file limit, with a package list and SBOM.
-- [ ] A published, verified ISO release (signed checksums, SBOMs): the [release workflow](.github/workflows/release.yml) is ready; it publishes only ISOs that pass every check.
+- [x] A published, verified ISO release: [v0.1.0](https://github.com/xzchick/envy-black-veil/releases/tag/v0.1.0), with Sigstore-signed checksums, package lists and SBOMs. The [release workflow](.github/workflows/release.yml) publishes only ISOs that pass every check.
 - [ ] Acceptance on real hardware.
 - [ ] Signed packages and a hosted update repo, and with it BLACK VEIL's own release identity (os-release), which needs that repo to stay in step with AlmaLinux's updates.
 - [ ] Optional persistence tuning for USB-stick live use.

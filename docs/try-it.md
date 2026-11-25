@@ -12,19 +12,27 @@ Two ways, from safest to most real:
 | Windows PC, Linux PC, Intel Mac | `envy-black-veil-0.1.0-x86_64.iso` |
 | Apple Silicon Mac (M1–M4), ARM Windows / Linux devices | `envy-black-veil-0.1.0-aarch64.iso` |
 
-Both are built and boot-tested by CI on every change: open the [**ISO** workflow](https://github.com/xzchick/envy-black-veil/actions/workflows/iso.yml), pick the latest green run, and download **envy-black-veil-iso** (x86_64) or **envy-black-veil-iso-aarch64** from its *Artifacts* (needs a free GitHub account; each build is kept 14 days). A signed release download is on the roadmap.
+Download yours, and `SHA256SUMS.txt`, from the **[latest release](https://github.com/xzchick/envy-black-veil/releases/latest)**. Every release ISO passed all of CI's checks before it was published. (Builds of every later change are kept for 14 days as artifacts of the [ISO workflow](https://github.com/xzchick/envy-black-veil/actions/workflows/iso.yml); they need a free GitHub account.)
 
 Check it before you use it:
 
 ```sh
-sha256sum -c envy-black-veil-0.1.0-x86_64.iso.sha256          # Linux
-shasum -a 256 -c envy-black-veil-0.1.0-aarch64.iso.sha256     # macOS
+sha256sum -c SHA256SUMS.txt --ignore-missing            # Linux
+shasum -a 256 -c SHA256SUMS.txt --ignore-missing        # macOS
 ```
 
 ```powershell
-# Windows PowerShell: compare with the .sha256 file
+# Windows PowerShell: the two lines must show the same checksum
 (Get-FileHash .\envy-black-veil-0.1.0-x86_64.iso -Algorithm SHA256).Hash.ToLower()
-Get-Content .\envy-black-veil-0.1.0-x86_64.iso.sha256
+Select-String envy-black-veil-0.1.0-x86_64.iso .\SHA256SUMS.txt
+```
+
+To check that the checksums themselves were made by this repository's release workflow, also download `SHA256SUMS.txt.sigstore.json` and run [cosign](https://docs.sigstore.dev/cosign/system_config/installation/):
+
+```sh
+cosign verify-blob --bundle SHA256SUMS.txt.sigstore.json \
+  --certificate-identity-regexp '^https://github.com/xzchick/envy-black-veil/' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com SHA256SUMS.txt
 ```
 
 Whatever you use, give the VM **UEFI firmware**, **4 GB of RAM or more** (6 GB is comfortable), **2+ CPUs**, and a **40 GB** disk if you want to install. The live session logs in by itself as `liveuser`; the desktop's **Install ENVY BLACK VEIL** icon installs it.
