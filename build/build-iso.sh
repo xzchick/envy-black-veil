@@ -41,6 +41,12 @@ die() { printf "\033[38;5;205mbuild-iso:\033[0m %s\n" "$*" >&2; exit 1; }
 [ "$(id -u)" = "0" ] || die "run with sudo (livemedia-creator needs root)."
 [ "$(uname -m)" = "$ARCH" ] || die "build $ARCH images on an $ARCH host (this one is $(uname -m))."
 [ "${#VOLID}" -le 32 ] || die "volume ID '$VOLID' is longer than 32 characters."
+# The image's packages are installed with this host's RPM settings: a host that
+# installs only some languages (container images: %_install_langs in /etc/rpm)
+# would build a BLACK VEIL without translations.
+langs="$(rpm --eval '%{_install_langs}' 2>/dev/null || echo all)"
+[ "$langs" = all ] || [ "$langs" = '%{_install_langs}' ] \
+    || die "this host installs only these languages: $langs. Remove that setting (grep -rl _install_langs /etc/rpm/) and build again."
 for t in rpmbuild createrepo_c livemedia-creator ksvalidator rsvg-convert curl python3; do
     command -v "$t" >/dev/null || die "missing '$t'. Install: lorax lorax-templates-almalinux anaconda rpm-build createrepo_c pykickstart librsvg2-tools grub2-tools-extra dejavu-sans-fonts dejavu-sans-mono-fonts (see the top of this script)."
 done

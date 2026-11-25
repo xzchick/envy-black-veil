@@ -166,6 +166,9 @@ jobs:
               dnf -y install lorax lorax-templates-almalinux anaconda rpm-build createrepo_c pykickstart \
                 librsvg2-tools grub2-tools-extra dejavu-sans-fonts dejavu-sans-mono-fonts libblockdev-nvme zstd python3 gzip curl \
                 xfsprogs e2fsprogs squashfs-tools
+              # AlmaLinux container images install English only (%_install_langs in
+              # /etc/rpm): the image would inherit that and lose every translation.
+              grep -rl "_install_langs" /etc/rpm/ 2>/dev/null | xargs -r rm -f
               OUTDIR=/out ./build/build-iso.sh
             ' 2>&1 | tee "$WORK/build-aarch64.log"
           ls -la "$WORK/out"

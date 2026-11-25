@@ -662,6 +662,8 @@ def live_checks(res: Results, qmp: QMP, args, out: Path) -> None:
               "print(repr(conf.timezone.geolocation_provider), conf.localization.use_geolocation)'",
               ok=lambda rc, o: o == "'' False")
     res.check("envy-tools works", "envy-tools list | head -6")
+    res.check("translations are installed (German, for one)",
+              "ls /usr/share/locale/de/LC_MESSAGES/ 2>/dev/null | wc -l", ok=lambda rc, o: o.isdigit() and int(o) >= 300)
     res.check("ENVY app runtime (Python, PyQt6, cryptography)",
               "python3 -c 'import PyQt6.QtWidgets, cryptography; print(\"ok\")'", ok=lambda rc, o: o.endswith("ok"))
     res.check("base system", "head -3 /etc/os-release", required=False)
