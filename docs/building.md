@@ -8,7 +8,8 @@ A clean AlmaLinux 10 machine or VM (x86_64, ~25 GB free disk, 8 GB+ RAM), as roo
 
 ```sh
 sudo dnf install -y epel-release
-sudo dnf install -y lorax lorax-templates-almalinux anaconda rpm-build createrepo_c pykickstart librsvg2-tools
+sudo dnf install -y lorax lorax-templates-almalinux anaconda rpm-build createrepo_c pykickstart \
+    librsvg2-tools grub2-tools-extra dejavu-sans-fonts
 ```
 
 ## Build

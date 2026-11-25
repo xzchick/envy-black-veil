@@ -17,14 +17,14 @@ jobs:
       - name: Install validators
         run: |
           sudo apt-get update
-          sudo apt-get install -y shellcheck desktop-file-utils libxml2-utils python3-yaml rpm librsvg2-bin
+          sudo apt-get install -y shellcheck desktop-file-utils libxml2-utils python3-yaml rpm librsvg2-bin grub-common fonts-dejavu-core
           sudo pip install --break-system-packages pykickstart
 
       - name: Validate the kickstart
         run: ksvalidator kickstart/envy-black-veil.ks
 
       - name: ShellCheck the scripts
-        run: shellcheck -e SC2059 tools/envy-tools build/build-iso.sh ci/build-in-vm.sh
+        run: shellcheck -e SC2059 tools/envy-tools build/build-iso.sh ci/build-in-vm.sh try-black-veil.sh
 
       - name: Check the boot-test script compiles
         run: python3 -m py_compile ci/boot-test.py

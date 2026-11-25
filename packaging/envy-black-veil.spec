@@ -13,6 +13,8 @@ URL:            https://github.com/xzchick/envy-black-veil
 Source0:        %{name}-%{version}.tar.gz
 BuildArch:      noarch
 BuildRequires:  librsvg2-tools
+BuildRequires:  grub2-tools-extra
+BuildRequires:  dejavu-sans-fonts
 
 %description
 Metapackage shell. Install the envy-black-veil-theme and envy-black-veil-release
@@ -23,6 +25,7 @@ subpackages to turn a stock AlmaLinux 10 + KDE Plasma 6 system into ENVY BLACK V
 Summary:        ENVY neon theme for KDE Plasma, SDDM, Plymouth, GRUB and Konsole
 Requires:       plymouth
 Requires:       plymouth-plugin-script
+Requires:       plymouth-plugin-label
 Requires:       sddm
 Supplements:    (sddm and plymouth)
 
@@ -53,6 +56,16 @@ rsvg-convert -w 48  -h 48  theme/plymouth/envy-black-veil/spark.svg -o theme/ply
 rsvg-convert -w 1920 -h 1080 theme/grub/envy-black-veil/background.svg -o theme/grub/envy-black-veil/background.png
 rsvg-convert -w 2560 -h 1440 theme/wallpaper/envy-black-veil.svg -o wallpaper-2560x1440.png
 
+# GRUB can't read TrueType: convert DejaVu to GRUB's .pf2 fonts, named exactly as
+# theme.txt asks for them. (grub-mkfont/fonts paths differ on Debian-based CI.)
+MKFONT=$(command -v grub2-mkfont || command -v grub-mkfont)
+SANS=$(find /usr/share/fonts -name DejaVuSans.ttf | head -n 1)
+SANSB=$(find /usr/share/fonts -name DejaVuSans-Bold.ttf | head -n 1)
+$MKFONT -n "DejaVu Sans 12" -s 12 -o grub-dejavu-sans-12.pf2 "$SANS"
+$MKFONT -n "DejaVu Sans 13" -s 13 -o grub-dejavu-sans-13.pf2 "$SANS"
+$MKFONT -n "DejaVu Sans 16" -s 16 -o grub-dejavu-sans-16.pf2 "$SANS"
+$MKFONT -n "DejaVu Sans Bold 28" -s 28 -o grub-dejavu-sans-bold-28.pf2 "$SANSB"
+
 %install
 # --- theme ---------------------------------------------------------------
 install -Dm644 theme/plasma/color-schemes/EnvyNeon.colors %{buildroot}%{_datadir}/color-schemes/EnvyNeon.colors
@@ -72,6 +85,11 @@ rm -f %{buildroot}%{_datadir}/plymouth/themes/envy-black-veil/*.svg
 install -d %{buildroot}/boot/grub2/themes/envy-black-veil
 install -Dm644 theme/grub/envy-black-veil/theme.txt       %{buildroot}/boot/grub2/themes/envy-black-veil/theme.txt
 install -Dm644 theme/grub/envy-black-veil/background.png   %{buildroot}/boot/grub2/themes/envy-black-veil/background.png
+install -m644 grub-*.pf2 %{buildroot}/boot/grub2/themes/envy-black-veil/
+
+# Switch the themed GRUB menu on in installed systems (Anaconda post-install hook)
+install -Dm644 theme/anaconda/95-envy-black-veil-grub.ks \
+    %{buildroot}%{_datadir}/anaconda/post-scripts/95-envy-black-veil-grub.ks
 
 # Wallpaper
 install -Dm644 wallpaper-2560x1440.png %{buildroot}%{_datadir}/wallpapers/EnvyBlackVeil/contents/images/2560x1440.png
@@ -106,6 +124,7 @@ fi
 /boot/grub2/themes/envy-black-veil/
 %{_datadir}/wallpapers/EnvyBlackVeil/
 %{_datadir}/plasma/shells/org.kde.plasma.desktop/contents/updates/envy-black-veil-wallpaper.js
+%{_datadir}/anaconda/post-scripts/95-envy-black-veil-grub.ks
 %{_sysconfdir}/skel/.config/kdeglobals
 %{_sysconfdir}/skel/.config/konsolerc
 

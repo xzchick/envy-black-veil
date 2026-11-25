@@ -5,6 +5,9 @@
 # kickstarts/10/x86_64/almalinux-live-kde.ks) with the ENVY identity, privacy
 # defaults and the runtime ENVY apps need layered on top.
 #
+# One kickstart for x86_64 and aarch64: build/build-iso.sh drops the lines marked
+# "x86_64-only" when building for other architectures.
+#
 # This builds JUST THE OS: a live, installable KDE desktop. The ENVY apps are not
 # bundled; add any of them after install with `envy-tools install` (or the
 # standalone ENVY Tools app). Build it with:  sudo ./build/build-iso.sh
@@ -62,9 +65,10 @@ anaconda-live
 dracut-live
 glibc-all-langpacks
 livesys-scripts
-memtest86+
+memtest86+		# x86_64-only (lorax's x86 boot menu needs it)
 plymouth-system-theme
 plymouth-plugin-script
+plymouth-plugin-label
 
 # KDE Plasma 6 desktop (from EPEL)
 @^kde-desktop-environment
@@ -84,6 +88,11 @@ epel-release
 # drop the tracker indexers gtk3 pulls in
 -tracker-miners
 -tracker
+# BLACK VEIL's login screen is SDDM with the ENVY theme. Plasma 6's group also pulls
+# in the newer Plasma Login Manager; with it installed, livesys would set the live
+# auto-login up there instead of in SDDM.
+-plasma-login-manager
+-kde-settings-plasmalogin
 
 # The runtime every ENVY app needs, so `envy-tools install` works offline-first
 python3
@@ -121,7 +130,9 @@ EOF
 
 # Privacy: nothing listens on the network by default. Printing and network
 # discovery stay installed but off until you turn them on.
-for unit in cups.service cups.socket cups-browsed.service avahi-daemon.service avahi-daemon.socket; do
+# (Cockpit comes in with the installer's dependencies; its socket would listen on 9090.)
+for unit in cups.service cups.socket cups-browsed.service avahi-daemon.service avahi-daemon.socket \
+            cockpit.socket cockpit.service; do
     systemctl disable "$unit" 2>/dev/null || :
 done
 
@@ -139,8 +150,16 @@ EOF
 echo black-veil > /etc/hostname
 install -d -m 0755 /var/lib/livesys
 cat > /var/lib/livesys/livesys-session-extra << 'EOF'
-# ENVY BLACK VEIL live-session extras (sourced by livesys at first live boot)
+# ENVY BLACK VEIL live-session extras (sourced by livesys at first live boot; the
+# installer copies the untouched image, so none of this reaches installed systems)
 hostnamectl set-hostname black-veil
+# The live user logs straight into Plasma through SDDM.
+mkdir -p /etc/sddm.conf.d
+cat > /etc/sddm.conf.d/90-envy-live-autologin.conf << EOT
+[Autologin]
+User=liveuser
+Session=plasma.desktop
+EOT
 EOF
 
 # The installer: livesys's KDE setup puts /usr/share/applications/liveinst.desktop

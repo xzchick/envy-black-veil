@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # build-iso.sh — build the ENVY BLACK VEIL live ISO.
 #
-# Runs as root on an AlmaLinux 10 x86_64 host or VM (the way AlmaLinux builds its
-# own live media). It:
+# Runs as root on an AlmaLinux 10 host, VM or privileged container, x86_64 or
+# aarch64 (the way AlmaLinux builds its own live media). It:
 #   1. builds the ENVY identity RPMs (theme, release + envy-tools),
 #   2. publishes them as a local repo at /srv/envy-black-veil/repo, which the
 #      kickstart installs from,
@@ -13,14 +13,14 @@
 #
 #   sudo dnf install -y epel-release
 #   sudo dnf install -y lorax lorax-templates-almalinux anaconda rpm-build \
-#        createrepo_c pykickstart librsvg2-tools
+#        createrepo_c pykickstart librsvg2-tools grub2-tools-extra dejavu-sans-fonts
 #   sudo ./build/build-iso.sh
 #
 # Env overrides: VERSION, ARCH, RELEASEVER, OUTDIR, ISO_NAME, VOLID.
 set -euo pipefail
 
 VERSION="${VERSION:-0.1.0}"
-ARCH="${ARCH:-x86_64}"
+ARCH="${ARCH:-$(uname -m)}"
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
 OUTDIR="${OUTDIR:-$HERE/output}"
 WORK="${WORK:-/var/tmp/envy-black-veil-rpmbuild}"
@@ -28,7 +28,8 @@ ISO_NAME="${ISO_NAME:-envy-black-veil-${VERSION}-${ARCH}.iso}"
 # ISO 9660 volume IDs are at most 32 characters; the live boot finds its root by it.
 VOLID="${VOLID:-ENVY-BLACK-VEIL-${VERSION//./-}-${ARCH}}"
 REPO_DIR=/srv/envy-black-veil/repo          # must match the kickstart's envy-local repo
-KS="$HERE/kickstart/envy-black-veil.ks"
+KS_SRC="$HERE/kickstart/envy-black-veil.ks"
+KS="$KS_SRC"
 BASEOS="https://repo.almalinux.org/almalinux/10/BaseOS/${ARCH}/os"
 
 say() { printf "\033[38;5;51m==>\033[0m %s\n" "$*"; }
@@ -40,7 +41,7 @@ die() { printf "\033[38;5;205mbuild-iso:\033[0m %s\n" "$*" >&2; exit 1; }
 [ "$(uname -m)" = "$ARCH" ] || die "build $ARCH images on an $ARCH host (this one is $(uname -m))."
 [ "${#VOLID}" -le 32 ] || die "volume ID '$VOLID' is longer than 32 characters."
 for t in rpmbuild createrepo_c livemedia-creator ksvalidator rsvg-convert curl python3; do
-    command -v "$t" >/dev/null || die "missing '$t'. Install: lorax lorax-templates-almalinux anaconda rpm-build createrepo_c pykickstart librsvg2-tools (see the top of this script)."
+    command -v "$t" >/dev/null || die "missing '$t'. Install: lorax lorax-templates-almalinux anaconda rpm-build createrepo_c pykickstart librsvg2-tools grub2-tools-extra dejavu-sans-fonts (see the top of this script)."
 done
 # Read the host's identity in a subshell: /etc/os-release defines VERSION, ID and
 # friends, which must not overwrite this script's own VERSION.
@@ -51,18 +52,25 @@ case "$host_os" in
     *) say "warning: this recipe is tested on AlmaLinux 10; this host is ${host_os##*:}." ;;
 esac
 
-say "Validating the kickstart"
+# One kickstart serves every architecture; lines marked "x86_64-only" are dropped
+# for the others (AlmaLinux's own aarch64 KDE recipe differs only by memtest86+).
+if [ "$ARCH" != "x86_64" ]; then
+    KS="/var/tmp/envy-black-veil-${ARCH}.ks"
+    grep -v '# x86_64-only' "$KS_SRC" > "$KS"
+fi
+say "Validating the kickstart ($ARCH)"
 ksvalidator "$KS" || die "kickstart failed validation."
 
 # The AlmaLinux 10 minor release the image is built from (e.g. 10.3), read from
-# almalinux-release in the BaseOS repository, as AlmaLinux's own build does.
-if [ -z "${RELEASEVER:-}" ]; then
-    primary=$(curl -sf "$BASEOS/repodata/repomd.xml" | grep -oE 'repodata/[^"]*-primary\.xml\.gz' | head -n 1) || primary=
-    RELEASEVER=$(curl -sf "$BASEOS/$primary" | gunzip | python3 -c \
-        'import re,sys; print(re.search(r"<name>almalinux-release</name>.*?ver=\"([^\"]+)\"", sys.stdin.read(), re.S).group(1))') || RELEASEVER=
-    [[ "$RELEASEVER" =~ ^10\.[0-9]+$ ]] || die "couldn't read the AlmaLinux 10 release version from $BASEOS (got '$RELEASEVER')."
-fi
-say "Building from AlmaLinux $RELEASEVER"
+# almalinux-release in the BaseOS repository (this also proves the repos answer).
+primary=$(curl -sf "$BASEOS/repodata/repomd.xml" | grep -oE 'repodata/[^"]*-primary\.xml\.gz' | head -n 1) || primary=
+ALMA_RELEASE=$(curl -sf "$BASEOS/$primary" | gunzip | python3 -c \
+    'import re,sys; print(re.search(r"<name>almalinux-release</name>.*?ver=\"([^\"]+)\"", sys.stdin.read(), re.S).group(1))') || ALMA_RELEASE=
+[[ "$ALMA_RELEASE" =~ ^10\.[0-9]+$ ]] || die "couldn't read the AlmaLinux 10 release version from $BASEOS (got '$ALMA_RELEASE')."
+# livemedia-creator only uses this for the boot-menu labels ("Start ENVY BLACK VEIL
+# 0.1.0"); the kickstart's repositories don't depend on it.
+RELEASEVER="${RELEASEVER:-$VERSION}"
+say "Building ENVY BLACK VEIL $VERSION from AlmaLinux $ALMA_RELEASE ($ARCH)"
 
 # --- 1. Build the ENVY identity RPMs ----------------------------------------
 say "Building the ENVY identity RPMs (theme, release + envy-tools)"

@@ -1,5 +1,6 @@
-// ENVY BLACK VEIL — SDDM greeter. QtQuick only, no external imports, so it runs
-// on a stock SDDM. Palette comes from theme.conf (config.*), with ENVY fallbacks.
+// ENVY BLACK VEIL — SDDM greeter. QtQuick plus SDDM's own components (TextBox,
+// PasswordBox, ComboBox, Button), so it runs on a stock SDDM with the Qt6 greeter.
+// Palette comes from theme.conf (config.*), with ENVY fallbacks.
 import QtQuick 2.15
 import SddmComponents 2.0
 
@@ -17,6 +18,10 @@ Rectangle {
     property string cLine: config.line !== "" ? config.line : "#1f2547"
 
     TextConstants { id: textConstants }
+
+    // SDDM's user model: Qt.UserRole + 1 is the user name role.
+    function userName(i) { return userModel.data(userModel.index(i, 0), Qt.UserRole + 1) }
+    function doLogin() { sddm.login(userName(user.index), password.text, session.index) }
 
     Connections {
         target: sddm
@@ -91,15 +96,18 @@ Rectangle {
                     arrowIcon: ""
                 }
 
-                TextField {
+                PasswordBox {
                     id: password
                     width: parent.width; height: 40
-                    echoMode: TextInput.Password
-                    placeholderText: "Passphrase"
                     color: "#121735"; textColor: root.cInk
-                    borderColor: root.cLine; focusColor: root.cPink
+                    borderColor: root.cLine; focusColor: root.cPink; hoverColor: root.cCyan
                     focus: true
-                    onAccepted: loginButton.clicked()
+                    Keys.onPressed: function (event) {
+                        if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
+                            root.doLogin()
+                            event.accepted = true
+                        }
+                    }
                     KeyNavigation.backtab: user; KeyNavigation.tab: loginButton
                 }
 
@@ -109,7 +117,7 @@ Rectangle {
                     text: "Unlock"
                     color: root.cPink; activeColor: root.cCyan; pressedColor: root.cCyan
                     textColor: "#050713"
-                    onClicked: sddm.login(user.currentText, password.text, session.index)
+                    onClicked: root.doLogin()
                     KeyNavigation.backtab: password; KeyNavigation.tab: session
                 }
             }
