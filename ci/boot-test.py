@@ -381,6 +381,12 @@ def live_checks(res: Results, qmp: QMP, args, out: Path) -> None:
             break
         time.sleep(5)
     rc, _ = res.check("Plasma desktop is running for the live user", "pgrep -u liveuser -a plasmashell")
+    appletsrc = "~/.config/plasma-org.kde.plasma.desktop-appletsrc"
+    deadline = time.monotonic() + 120 * args.slow
+    while rc == 0 and time.monotonic() < deadline:       # Plasma writes this once the desktop is up
+        if con.run(f"test -s {appletsrc}", 20)[0] == 0:
+            break
+        time.sleep(5)
     res.check("SDDM auto-login config", "grep -rh -A2 '^\\[Autologin\\]' /etc/sddm.conf /etc/sddm.conf.d/ 2>/dev/null",
               required=False)
     if rc != 0:                                          # explain a missing desktop in the same run
@@ -389,7 +395,7 @@ def live_checks(res: Results, qmp: QMP, args, out: Path) -> None:
                   f"{SUDO} journalctl -b -o cat --no-pager _UID=$(id -u liveuser) | tail -n 60", required=False)
         res.check("diagnosis: errors this boot", f"{SUDO} journalctl -b -p err -o cat --no-pager | tail -n 40",
                   required=False)
-    time.sleep(args.settle)
+    time.sleep(args.settle * args.slow)
     if qmp.screenshot(out / "desktop.png"):
         print("  saved desktop.png", flush=True)
 
@@ -438,9 +444,12 @@ def install_to_disk(res: Results, args, out: Path) -> bool:
            " ANACONDA_PRODUCTNAME=\"$(sed -r -e 's/ *release.*//' /etc/system-release)\""
            " ANACONDA_PRODUCTVERSION=\"$(sed -r -e 's/^.* ([0-9.]+).*$/\\1/' /etc/system-release)\""
            " ANACONDA_ISFINAL=true")
-    con.run("{ ( " + SUDO + " " + env + " sh -c 'setenforce 0; anaconda --liveinst --cmdline"
-            " --kickstart=/tmp/envy-install.ks > /tmp/envy-install.log 2>&1; echo $? > /tmp/envy-install.rc;"
-            " setenforce 1' ) > /dev/null 2>&1 & }", 30)
+    # In live mode Anaconda ignores --kickstart and parses its interactive defaults,
+    # /usr/share/anaconda/interactive-defaults.ks, instead; in this throwaway live VM the
+    # test's kickstart takes that file's place.
+    con.run("{ ( " + SUDO + " " + env + " sh -c 'cp /tmp/envy-install.ks /usr/share/anaconda/interactive-defaults.ks;"
+            " setenforce 0; anaconda --liveinst --cmdline --kickstart=/tmp/envy-install.ks"
+            " > /tmp/envy-install.log 2>&1; echo $? > /tmp/envy-install.rc; setenforce 1' ) > /dev/null 2>&1 & }", 30)
     started, last, status = time.monotonic(), "", None
     while time.monotonic() - started < args.install_timeout:
         time.sleep(20)
