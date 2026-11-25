@@ -6,7 +6,7 @@
 
 Name:           envy-black-veil
 Version:        0.1.0
-Release:        4%{?dist}
+Release:        5%{?dist}
 Summary:        ENVY BLACK VEIL identity: theme and release identity
 License:        MIT
 URL:            https://github.com/xzchick/envy-black-veil
@@ -38,7 +38,7 @@ dark defaults in /etc/skel.
 
 # ---------------------------------------------------------------------------
 %package release
-Summary:        ENVY BLACK VEIL release file, envy-tools and the hardware report
+Summary:        ENVY BLACK VEIL release file, update repository, envy-tools and the hardware report
 
 %description release
 Marks the system as ENVY BLACK VEIL (/etc/envy-black-veil-release), installs
@@ -46,8 +46,12 @@ Marks the system as ENVY BLACK VEIL (/etc/envy-black-veil-release), installs
 `envy-hardware-report` (the menu's Hardware Report), which describes this computer's
 hardware for a BLACK VEIL hardware report without anything that identifies you; and sets
 the privacy defaults: no NetworkManager connectivity check, no geolocation lookup
-in the installer, and Firefox without telemetry, studies or sponsored content. AlmaLinux's own release package stays in
-place, so dnf, repositories and updates keep working exactly as on AlmaLinux 10.
+in the installer, and Firefox without telemetry, studies or sponsored content. It
+adds BLACK VEIL's own signed package repository
+(https://xzchick.github.io/envy-black-veil/el10/) and its public key, so `dnf
+upgrade` updates the ENVY packages along with AlmaLinux. AlmaLinux's own release
+package stays in place, so dnf, repositories and updates keep working exactly as
+on AlmaLinux 10.
 
 # ---------------------------------------------------------------------------
 %package live
@@ -144,6 +148,9 @@ install -Dm644 privacy/90-envy-privacy.conf \
     %{buildroot}%{_sysconfdir}/NetworkManager/conf.d/90-envy-privacy.conf
 install -Dm644 privacy/firefox-policies.json %{buildroot}%{_sysconfdir}/firefox/policies/policies.json
 install -Dm644 privacy/anaconda-90-envy-privacy.conf %{buildroot}%{_sysconfdir}/anaconda/conf.d/90-envy-privacy.conf
+# BLACK VEIL's signed package repository, and the key its packages are signed with
+install -Dm644 repo/envy-black-veil.repo %{buildroot}%{_sysconfdir}/yum.repos.d/envy-black-veil.repo
+install -Dm644 repo/RPM-GPG-KEY-envy-black-veil %{buildroot}%{_sysconfdir}/pki/rpm-gpg/RPM-GPG-KEY-envy-black-veil
 
 # --- live ----------------------------------------------------------------
 install -d %{buildroot}%{_prefix}/lib/dracut/modules.d/90envy-live-persist
@@ -183,12 +190,19 @@ fi
 %dir %{_sysconfdir}/firefox/policies
 %config(noreplace) %{_sysconfdir}/firefox/policies/policies.json
 %config(noreplace) %{_sysconfdir}/anaconda/conf.d/90-envy-privacy.conf
+%config(noreplace) %{_sysconfdir}/yum.repos.d/envy-black-veil.repo
+%{_sysconfdir}/pki/rpm-gpg/RPM-GPG-KEY-envy-black-veil
 
 %files live
 %license LICENSE
 %{_prefix}/lib/dracut/modules.d/90envy-live-persist/
 
 %changelog
+* Wed Nov 25 2026 Envy <235594225+xzchick@users.noreply.github.com> - 0.1.0-5
+- The release package adds BLACK VEIL's signed package repository on GitHub Pages
+  and its public key (RSA 4096, 3F39 076E 0B4B 41F4 23CA 374A B1DD ECDE 888D
+  A680), so dnf upgrade updates the ENVY packages too.
+
 * Wed Nov 25 2026 Envy <235594225+xzchick@users.noreply.github.com> - 0.1.0-4
 - New envy-black-veil-live: the live boot menu's "keep changes on this USB stick"
   entry turns a stick's free space into persistent storage on its first boot,

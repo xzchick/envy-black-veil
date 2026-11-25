@@ -239,6 +239,9 @@ EOF
 
 # Housekeeping, as AlmaLinux's live media does it
 rpm --import /etc/pki/rpm-gpg/RPM-GPG-KEY-AlmaLinux-10 2>/dev/null || rpm --import /etc/pki/rpm-gpg/RPM-GPG-KEY-AlmaLinux || :
+# BLACK VEIL's own package key (the release package's update repository), trusted from
+# the start like AlmaLinux's, so updates need no key prompt.
+rpm --import /etc/pki/rpm-gpg/RPM-GPG-KEY-envy-black-veil
 rm -f /var/lib/rpm/__db*
 rm -f /core*
 rm -f /var/lib/systemd/random-seed

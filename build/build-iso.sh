@@ -87,7 +87,7 @@ say "Building the ENVY identity RPMs (theme, release + envy-tools)"
 rm -rf "$WORK"; mkdir -p "$WORK"/{SOURCES,SPECS,RPMS,BUILD,BUILDROOT,SRPMS}
 tar --transform "s,^,envy-black-veil-${VERSION}/," \
     -czf "$WORK/SOURCES/envy-black-veil-${VERSION}.tar.gz" -C "$HERE" \
-    theme tools privacy live LICENSE
+    theme tools privacy live repo LICENSE
 rpmbuild --define "_topdir $WORK" -ba "$HERE/packaging/envy-black-veil.spec"
 
 say "Publishing the local package repo at $REPO_DIR"

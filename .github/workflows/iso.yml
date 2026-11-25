@@ -17,6 +17,7 @@ on:
       - tools/**
       - privacy/**
       - live/**
+      - repo/**
       - build/**
       - ci/**
       - try-black-veil.sh
