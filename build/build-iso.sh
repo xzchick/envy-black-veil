@@ -42,14 +42,14 @@ die() { printf "\033[38;5;205mbuild-iso:\033[0m %s\n" "$*" >&2; exit 1; }
 for t in rpmbuild createrepo_c livemedia-creator ksvalidator rsvg-convert curl python3; do
     command -v "$t" >/dev/null || die "missing '$t'. Install: lorax lorax-templates-almalinux anaconda rpm-build createrepo_c pykickstart librsvg2-tools (see the top of this script)."
 done
-if [ -r /etc/os-release ]; then
-    # shellcheck disable=SC1091
-    . /etc/os-release
-    case "${ID:-}:${VERSION_ID:-}" in
-        almalinux:10*) ;;
-        *) say "warning: this recipe is tested on AlmaLinux 10; this host is ${PRETTY_NAME:-unknown}." ;;
-    esac
-fi
+# Read the host's identity in a subshell: /etc/os-release defines VERSION, ID and
+# friends, which must not overwrite this script's own VERSION.
+# shellcheck disable=SC1091
+host_os=$( (. /etc/os-release 2>/dev/null && echo "${ID:-}:${VERSION_ID:-}:${PRETTY_NAME:-unknown}") || echo "::unknown")
+case "$host_os" in
+    almalinux:10*) ;;
+    *) say "warning: this recipe is tested on AlmaLinux 10; this host is ${host_os##*:}." ;;
+esac
 
 say "Validating the kickstart"
 ksvalidator "$KS" || die "kickstart failed validation."

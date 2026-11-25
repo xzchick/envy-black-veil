@@ -64,6 +64,7 @@ glibc-all-langpacks
 livesys-scripts
 memtest86+
 plymouth-system-theme
+plymouth-plugin-script
 
 # KDE Plasma 6 desktop (from EPEL)
 @^kde-desktop-environment
@@ -132,19 +133,23 @@ cat > /etc/sddm.conf.d/10-envy.conf << 'EOF'
 Current=envy-black-veil
 EOF
 
-# A name of its own
+# A name of its own: installed systems start as black-veil. The live session
+# renames itself to localhost-live at boot, then runs livesys's hook for derived
+# spins, which names it back.
 echo black-veil > /etc/hostname
+install -d -m 0755 /var/lib/livesys
+cat > /var/lib/livesys/livesys-session-extra << 'EOF'
+# ENVY BLACK VEIL live-session extras (sourced by livesys at first live boot)
+hostnamectl set-hostname black-veil
+EOF
 
-# Show the installer in the menu and on the live user's desktop only (not in
-# /etc/skel, so installed users never get an "Install" icon). Icon fix as in
-# AlmaLinux's live media.
+# The installer: livesys's KDE setup puts /usr/share/applications/liveinst.desktop
+# on the live user's desktop, menu and favourites at boot, so name it here. (Don't
+# create /home/liveuser now: livesys would then skip /etc/skel, and with it the
+# ENVY colours.) Icon fix as in AlmaLinux's live media.
 cp -a /usr/share/icons/hicolor/scalable/apps/org.fedoraproject.AnacondaInstaller.svg \
   /usr/share/icons/hicolor/48x48/apps/ 2>/dev/null || :
-sed -i 's/NoDisplay=true/NoDisplay=false/' /usr/share/applications/liveinst.desktop
 sed -i 's/^Name=.*/Name=Install ENVY BLACK VEIL/' /usr/share/applications/liveinst.desktop
-mkdir -p /home/liveuser/Desktop
-cp -a /usr/share/applications/liveinst.desktop /home/liveuser/Desktop/liveinst.desktop
-chmod +x /home/liveuser/Desktop/liveinst.desktop
 
 # Welcome note for the first terminal
 cat > /etc/motd << 'EOF'

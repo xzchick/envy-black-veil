@@ -11,7 +11,7 @@ This guide covers two different things. Pick the one you want:
 
 ## What you need
 
-- The BLACK VEIL ISO — build it with [`build/build-iso.sh`](../build/build-iso.sh) on a Linux host, or download it from [Releases](https://github.com/xzchick/envy-black-veil/releases).
+- The BLACK VEIL ISO — build it with [`build/build-iso.sh`](../build/build-iso.sh) on an AlmaLinux 10 host, or download the one CI builds and boot-tests on every change (the **ISO** workflow's `envy-black-veil-iso` artifact; a signed release is on the roadmap).
 - A **USB stick (≥ 4 GB)** to boot the live system from.
 - For "Carry it": a separate **external SSD / HDD / USB drive (≥ 32 GB; an SSD is strongly preferred)** to install onto. **Everything on it will be erased.**
 - A 64-bit PC that can boot from USB (UEFI, ideally with Secure Boot that you can toggle).
@@ -48,7 +48,7 @@ sudo dd if=envy-black-veil-0.1.0-x86_64.iso of=/dev/sdX bs=4M status=progress of
 1. Plug the USB stick in. Turn the PC on and open the one-time **boot menu** (often **F12**, **F11**, **F9**, or **Esc** — your PC shows which at power-on).
 2. Choose the USB stick. Prefer the **UEFI** entry if both a UEFI and a legacy one are listed.
 3. If it won't boot, enter firmware setup and **disable Secure Boot** (this image isn't signed for every vendor's key), then try again.
-4. BLACK VEIL boots to the ENVY desktop, auto-logged-in as the live user. Nothing is written to any disk yet.
+4. BLACK VEIL boots to the ENVY desktop, auto-logged-in as the live user (`liveuser`). Nothing is written to any disk yet.
 
 From here you can just use it, or run the installer to carry it onto an external drive.
 
@@ -58,20 +58,20 @@ From here you can just use it, or run the installer to carry it onto an external
 
 > Plug in your **target external drive now**, alongside the USB boot stick. You will choose it explicitly.
 
-1. Launch **Install ENVY BLACK VEIL** from the desktop (or the menu). The ENVY-branded Calamares installer opens.
-2. **Welcome / Location / Keyboard** — language, timezone, keyboard. Next through them.
-3. **Partitions — this is the important screen.**
-   - At the top, find the **"Install to"** / storage-device selector and choose your **external drive** by size and model (e.g. *Samsung T7 1TB*, `/dev/sdc`). Double-check it is **not** the internal disk (often the largest internal NVMe/SATA device).
-   - Choose **Erase disk** to give the whole external drive to BLACK VEIL.
-   - Tick **Encrypt system** and set a strong passphrase if you want full-disk encryption (recommended for a drive you carry around — it's the LUKS passphrase the ENVY boot splash will ask for).
-   - **Bootloader location:** make sure the "Install boot loader on:" option points at the **external drive itself** (its own EFI partition), *not* the internal disk. Calamares defaults to the device you're installing to; just confirm it. This is what makes the drive self-contained and keeps the host PC untouched.
-4. **Users** — your name, username, a strong password. The installed system does **not** auto-login (only the live session did).
-5. **Summary** — read it. Confirm the target is your external drive and the bootloader goes there too. Then **Install**.
+1. Launch **Install ENVY BLACK VEIL** from the desktop (or the menu). This is Anaconda, AlmaLinux's own installer (Calamares isn't packaged for AlmaLinux 10).
+2. **Language** — pick it, then **Continue**. You land on the **Installation Summary**.
+3. **Installation Destination — this is the important screen.**
+   - Under **Local Standard Disks**, select **only your external drive** (identify it by size and model, e.g. *Samsung T7 1TB*). Click the internal disk to **un-select** it if it's ticked. Anaconda only ever touches the disks selected here.
+   - Leave **Storage Configuration** on **Automatic** to give the whole external drive to BLACK VEIL (you'll be offered to reclaim space if it isn't empty — delete everything on *that* drive).
+   - Tick **Encrypt my data** for full-disk LUKS encryption (recommended for a drive you carry). The passphrase you set is the one the ENVY boot splash asks for.
+   - **Boot loader:** click **Full disk summary and boot loader…** at the bottom and make sure the boot device is the **external drive**. With only the external drive selected, Anaconda puts the EFI system partition and GRUB there. Your internal disk is never written; the firmware just gets a boot-menu entry, which is harmless.
+4. **User Creation** — your name, username and a strong password; tick **Make this user administrator**. The installed system does **not** auto-login (only the live session does). Root stays locked.
+5. Check the summary hub has no warnings, then **Begin Installation**.
 6. When it finishes, **shut down**, remove the USB boot stick (you can keep the external drive plugged in), and boot from the external drive via the firmware boot menu.
 
 ### Boot it on other computers
 
-Because the bootloader lives on the external drive's own EFI partition, you can move the drive to another PC and boot it from that PC's boot menu. Notes:
+Because the bootloader lives on the external drive's own EFI partition — including AlmaLinux's standard fallback loader, `EFI/BOOT/BOOTX64.EFI`, which is what another PC looks for — you can move the drive to another PC and boot it from that PC's boot menu. Notes:
 
 - **UEFI only.** The portable install is built for UEFI. On a strictly legacy-BIOS machine it may not boot.
 - **Secure Boot** may need to be off on each host, as above.
@@ -90,15 +90,15 @@ envy-tools install vault veil hypothesis
 envy-tools install all                # the whole suite
 ```
 
-Each tool installs into one isolated environment and appears in the KDE menu. After that they run fully offline. See [customizing.md](customizing.md).
+Each tool installs into one isolated environment and appears in the KDE menu. After that they run fully offline. (You can also use the standalone [ENVY Tools](https://github.com/xzchick/envy-tools) app, which installs each app's signed release build.) See [customizing.md](customizing.md).
 
 ---
 
 ## Safety checklist
 
 - [ ] I identified the **target external drive** by size/model, not by guesswork.
-- [ ] The installer's **"Install to"** is the external drive.
-- [ ] The **bootloader location** is that same external drive, not the internal disk.
+- [ ] In **Installation Destination**, only the external drive is selected.
+- [ ] The **boot loader** device is that same external drive, not the internal disk.
 - [ ] I have nothing I need on the target drive — it will be **erased**.
 - [ ] (Recommended) I enabled **encryption** for a drive I'll carry around.
 

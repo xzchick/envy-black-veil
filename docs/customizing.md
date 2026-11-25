@@ -54,5 +54,5 @@ sudo plymouth-set-default-theme -R envy-black-veil
 ## Defaults and security
 
 - SELinux is **enforcing**, the firewall is **on**, and **nothing listens** (`sshd` and `cups` are off by default). Turn on only what you need.
-- The **live** session auto-logs-in; an **installed** system does not (Calamares removes the autologin drop-in).
+- The **live** session auto-logs-in (livesys sets that up only when booted live); an **installed** system does not.
 - For a portable install you carry around, enable **LUKS encryption** in the installer — the ENVY boot splash prompts for the passphrase.

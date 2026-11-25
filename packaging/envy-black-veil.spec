@@ -22,6 +22,7 @@ subpackages to turn a stock AlmaLinux 10 + KDE Plasma 6 system into ENVY BLACK V
 %package theme
 Summary:        ENVY neon theme for KDE Plasma, SDDM, Plymouth, GRUB and Konsole
 Requires:       plymouth
+Requires:       plymouth-plugin-script
 Requires:       sddm
 Supplements:    (sddm and plymouth)
 

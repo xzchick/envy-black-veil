@@ -37,6 +37,10 @@ from pathlib import Path
 # temporary folder whatever --out is.
 SOCKETS = Path(tempfile.mkdtemp(prefix="envy-bt-"))
 
+# livesys gives the live user an empty password (and wheel membership, but no
+# NOPASSWD rule), so root checks answer sudo's prompt with an empty line.
+SUDO = "printf '\\n' | sudo -S -p ''"
+
 OVMF_CODE = ["/usr/share/OVMF/OVMF_CODE_4M.fd", "/usr/share/OVMF/OVMF_CODE.fd"]
 OVMF_VARS = ["/usr/share/OVMF/OVMF_VARS_4M.fd", "/usr/share/OVMF/OVMF_VARS.fd"]
 
@@ -302,10 +306,10 @@ def boot_checks(args, out: Path) -> list[dict]:
         check("desktop session type", "loginctl show-session $(loginctl list-sessions --no-legend | awk '$3==\"liveuser\" && $0 !~ /ttyS0/ {print $1; exit}') -p Type -p Desktop",
               required=False)
         check("SELinux is enforcing", "getenforce", ok=lambda rc, o: o == "Enforcing")
-        check("firewall is running", "firewall-cmd --state 2>/dev/null || sudo -n firewall-cmd --state",
+        check("firewall is running", f"{SUDO} firewall-cmd --state",
               ok=lambda rc, o: o.endswith("running"))
         check("firewall opens no services or ports",
-              "sudo -n firewall-cmd --list-services; sudo -n firewall-cmd --list-ports",
+              f"{SUDO} firewall-cmd --list-services; {SUDO} firewall-cmd --list-ports",
               ok=lambda rc, o: rc == 0 and set(o.split()) <= {"dhcpv6-client"})
         check("SSH server is off", "systemctl is-enabled sshd 2>&1; systemctl is-active sshd 2>&1",
               ok=lambda rc, o: "enabled" not in o.split() and "active" not in o.split())

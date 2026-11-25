@@ -75,6 +75,8 @@ trap stop_vm EXIT
 
 for _ in $(seq 1 120); do vm true 2>/dev/null && break; sleep 5; done
 vm true || { tail -n 60 "$VMDIR/console.log"; die "the VM never answered on SSH"; }
+# Commands in single quotes run inside the VM, so they expand there, on purpose.
+# shellcheck disable=SC2016
 vm 'sudo cloud-init status --wait >/dev/null 2>&1; . /etc/os-release; echo "VM: $PRETTY_NAME, $(nproc) CPUs"; free -h | head -2; df -h /'
 
 say "Copying the repository into the VM"
