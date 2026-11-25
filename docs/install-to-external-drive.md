@@ -74,6 +74,21 @@ Ventoy can start the ISO too, but it isn't tested, and *keep changes* doesn't wo
 
 The live desktop opens by itself, logged in as `liveuser`. Nothing is written to the computer's disks unless you run the installer.
 
+### What to expect on real hardware
+
+BLACK VEIL carries AlmaLinux 10's kernel and its full firmware set:
+- Intel, AMD and NVIDIA graphics firmware;
+- Intel, Realtek, MediaTek, Qualcomm/Atheros and Broadcom (brcmfmac) Wi-Fi and Bluetooth;
+- Intel and AMD CPU microcode;
+- the Sound Open Firmware most laptops from 2019 on need for audio.
+
+The known gaps:
+- **NVIDIA graphics** run on the open-source driver (nouveau), which is fine for the desktop but not for gaming or CUDA. NVIDIA's own driver isn't included. If the screen stays black, use *basic graphics mode*.
+- **Older Broadcom Wi-Fi** (BCM43xx chips that need Broadcom's proprietary `wl` driver, in some older MacBooks and laptops) has no driver. Use Ethernet or a USB Wi-Fi adapter.
+- **Intel Macs with a T2 chip** (2018–2020) start, but their internal keyboard, trackpad and speakers need drivers that aren't in the standard Linux kernel. Plug in a USB keyboard and mouse.
+
+The Hardware Report ([below](#tell-us-how-it-went)) lists any device without a driver and any firmware that failed to load.
+
 ---
 
 ## Keep changes on the USB stick
