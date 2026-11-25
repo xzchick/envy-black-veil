@@ -547,6 +547,21 @@ def no_phone_home(prefix, sudo):
     ]
 
 
+def update_repo(prefix, sudo):
+    """BLACK VEIL's own signed package repository: set up, its key trusted from the start.
+    Whether it answers depends on the network, so that one only informs."""
+    return [
+        (f"{prefix}BLACK VEIL's signed update repository is set up, its key trusted",
+         "grep -h -E '^(baseurl|gpgcheck)=' /etc/yum.repos.d/envy-black-veil.repo; "
+         "rpm -q gpg-pubkey --qf '%{SUMMARY}\\n' | grep -c 'ENVY BLACK VEIL packages'",
+         lambda rc, o: o.split() == ["baseurl=https://xzchick.github.io/envy-black-veil/el10/", "gpgcheck=1", "1"], True),
+        (f"{prefix}the update repository answers, with its signed metadata",
+         f"{sudo} dnf -y -q --repo envy-black-veil --setopt=envy-black-veil.repo_gpgcheck=1 makecache 2>&1 | tail -n 3; "
+         "dnf -q --repo envy-black-veil repoquery 2>/dev/null | grep -c envy-black-veil",
+         lambda rc, o: (o.splitlines() or ["0"])[-1] not in ("", "0"), False),
+    ]
+
+
 # ----- boot 1: the real boot path ---------------------------------------------
 
 def boot_real(args, out: Path) -> list[str]:
@@ -662,7 +677,7 @@ def live_checks(res: Results, qmp: QMP, args, out: Path) -> None:
     res.check("graphical target reached", "systemctl is-active graphical.target", ok=lambda rc, o: o == "active")
     res.check("SDDM login manager active", "systemctl is-active sddm", ok=lambda rc, o: o == "active")
     res.check("booted with UEFI", "test -d /sys/firmware/efi && echo uefi", ok=lambda rc, o: o == "uefi")
-    for name, command, ok, required in no_network_listeners("", SUDO) + no_phone_home("", SUDO):
+    for name, command, ok, required in no_network_listeners("", SUDO) + no_phone_home("", SUDO) + update_repo("", SUDO):
         res.check(name, command, ok=ok, required=required)
     res.check("ENVY packages installed", "rpm -q envy-black-veil-theme envy-black-veil-release")
     res.check("ENVY release file", "cat /etc/envy-black-veil-release", ok=lambda rc, o: "ENVY BLACK VEIL" in o)
@@ -883,7 +898,8 @@ def boot_installed(args, out: Path, res: Results, disk: Path, secure: bool = Fal
         res.check("installed: boot menu entries named ENVY BLACK VEIL",
                   f"{s} sh -c \"grep -h '^title' /boot/loader/entries/*.conf\"",
                   ok=lambda rc, o: bool(o) and all("ENVY BLACK VEIL" in line for line in o.splitlines()))
-        for name, command, ok, required in no_network_listeners("installed: ", s) + no_phone_home("installed: ", s):
+        for name, command, ok, required in (no_network_listeners("installed: ", s) + no_phone_home("installed: ", s)
+                                            + update_repo("installed: ", s)):
             res.check(name, command, ok=ok, required=required)
         res.check("installed: ENVY packages", "rpm -q envy-black-veil-theme envy-black-veil-release")
         res.check("installed: ENVY colours for the new user (skel)",
@@ -1023,12 +1039,14 @@ def boot_stick(args, out: Path, res: Results, stick: Path, name: str, title: str
     for _ in range(abs(target - default)):
         qmp.cmd("send-key", keys=[{"type": "qcode", "data": "down" if target > default else "up"}])
         con.drain(0.3)
-    # GRUB's editor: the entry's first line is its kernel line; add a serial console to
-    # it and boot (ctrl-x), as anyone can at this menu.
+    # GRUB's editor: it opens on its own "setparams '<title>'" line and a blank one, then
+    # the entry's kernel line. Add a serial console to the end of that and boot (ctrl-x),
+    # as anyone can at this menu.
     qmp.type_text("e", enter=False, between=pump)
     con.drain(2)
-    qmp.cmd("send-key", keys=[{"type": "qcode", "data": "end"}])
-    con.drain(0.3)
+    for key in ("down", "down", "end"):
+        qmp.cmd("send-key", keys=[{"type": "qcode", "data": key}])
+        con.drain(0.3)
     qmp.type_text(f" console=tty0 console={PLATFORM['tty']},115200n8 plymouth.ignore-serial-consoles",
                   enter=False, between=pump)
     qmp.screenshot(out / f"{name}-edit.png")
@@ -1081,6 +1099,9 @@ def usb_persistence(args, out: Path, res: Results) -> None:
         proc, qmp = vm
         con = res.console
         res.record("USB stick: boots through its own menu to the live system", True, "logged in over serial")
+        res.check("USB stick: started with the 'keep changes' entry's kernel line (plus the serial console)",
+                  "cat /proc/cmdline",
+                  ok=lambda rc, o: f"rd.live.overlay=LABEL={PERSIST_LABEL}" in o and f"console={PLATFORM['tty']}" in o)
         res.check("USB stick: first 'keep changes' boot made the persistence partition",
                   f"lsblk -rno NAME,LABEL | grep -w {PERSIST_LABEL}")
         res.check("USB stick: the live system keeps its changes there",
